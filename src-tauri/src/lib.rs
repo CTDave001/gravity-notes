@@ -1,4 +1,5 @@
 mod commands;
+mod export;
 mod storage;
 
 use commands::*;
@@ -111,6 +112,8 @@ pub fn run() {
             list_notes,
             delete_if_empty,
             cleanup_empty_notes,
+            export::export_note_file,
+            export::get_downloads_dir,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
