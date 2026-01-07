@@ -12,9 +12,13 @@
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "Gravity",
-        "width": 800,
-        "height": 600,
+        "width": 1000,
+        "height": 700,
+        "minWidth": 600,
+        "minHeight": 400,
+        "center": true,
         "resizable": true,
         "fullscreen": false
       }
