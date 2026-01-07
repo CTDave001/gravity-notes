@@ -1,12 +1,5 @@
-use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct ExportOptions {
-    pub format: String, // "pdf", "md", "txt"
-    pub template: String, // "academic", "minimal", "code"
-}
 
 #[tauri::command]
 pub async fn export_note_file(
