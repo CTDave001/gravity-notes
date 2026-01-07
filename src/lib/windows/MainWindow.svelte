@@ -4,6 +4,7 @@
   import StatusBar from '../components/StatusBar.svelte';
   import NoteList from '../components/NoteList.svelte';
   import SearchBar from '../components/SearchBar.svelte';
+  import ExportModal from '../components/ExportModal.svelte';
   import { listNotes, getNote, saveNote, createNote, deleteNote } from '../api';
   import type { NoteMeta, EditorStats } from '../types';
 
@@ -19,6 +20,7 @@
   let saveTimeout: ReturnType<typeof setTimeout> | null = $state(null);
 
   let editor: Editor | undefined = $state();
+  let showExportModal: boolean = $state(false);
 
   const SAVE_DELAY = 200;
 
@@ -206,15 +208,26 @@
         <div class="text-sm font-medium text-surface-700 dark:text-surface-300 truncate">
           {selectedNote.title || 'Untitled'}
         </div>
-        <button
-          class="p-1.5 rounded hover:bg-red-100 dark:hover:bg-red-900/30 text-surface-500 hover:text-red-600 dark:text-surface-400 dark:hover:text-red-400 transition-colors"
-          onclick={handleDeleteNote}
-          title="Delete note"
-        >
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-          </svg>
-        </button>
+        <div class="flex items-center gap-1">
+          <button
+            class="p-1.5 rounded hover:bg-surface-100 dark:hover:bg-surface-800 text-surface-500 hover:text-surface-700 dark:text-surface-400 dark:hover:text-surface-200 transition-colors"
+            onclick={() => showExportModal = true}
+            title="Export note"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+          </button>
+          <button
+            class="p-1.5 rounded hover:bg-red-100 dark:hover:bg-red-900/30 text-surface-500 hover:text-red-600 dark:text-surface-400 dark:hover:text-red-400 transition-colors"
+            onclick={handleDeleteNote}
+            title="Delete note"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+          </button>
+        </div>
       </div>
       <!-- Editor -->
       <div class="flex-1 overflow-hidden">
@@ -245,3 +258,11 @@
     {/if}
   </div>
 </div>
+
+<!-- Export Modal -->
+<ExportModal
+  show={showExportModal}
+  noteTitle={selectedNote?.title ?? 'Untitled'}
+  noteContent={content}
+  onclose={() => showExportModal = false}
+/>
