@@ -2,7 +2,6 @@
   import { onMount, onDestroy } from 'svelte';
   import { listen, type UnlistenFn } from '@tauri-apps/api/event';
   import { check } from '@tauri-apps/plugin-updater';
-  import { relaunch } from '@tauri-apps/plugin-process';
   import Editor from '../components/Editor.svelte';
   import StatusBar from '../components/StatusBar.svelte';
   import NoteList from '../components/NoteList.svelte';
@@ -53,11 +52,7 @@
   let unlistenExport: UnlistenFn | null = null;
   let unlistenNotesChanged: UnlistenFn | null = null;
 
-  // Update state
-  let updateAvailable: boolean = $state(false);
-  let updateVersion: string = $state('');
-  let isUpdating: boolean = $state(false);
-
+  
   const POLL_INTERVAL = 1500;
   const EDGE_ZONE_WIDTH = 20;
   const EDGE_HOVER_DELAY = 350; // ms to hover at edge before showing sidebar
@@ -214,35 +209,18 @@
     }, 5000);
   }
 
-  async function checkForUpdates() {
+  // Silent auto-update: download in background, install on next restart
+  async function checkAndDownloadUpdate() {
     try {
       const update = await check();
       if (update) {
-        updateAvailable = true;
-        updateVersion = update.version;
+        // Download silently - will be installed on next app restart
+        await update.download();
+        console.log(`Update ${update.version} downloaded, will install on restart`);
       }
     } catch (err) {
-      console.log('Update check failed:', err);
+      // Silent fail - updates are invisible infrastructure
     }
-  }
-
-  async function installUpdate() {
-    if (isUpdating) return;
-    isUpdating = true;
-    try {
-      const update = await check();
-      if (update) {
-        await update.downloadAndInstall();
-        await relaunch();
-      }
-    } catch (err) {
-      console.error('Update failed:', err);
-      isUpdating = false;
-    }
-  }
-
-  function dismissUpdate() {
-    updateAvailable = false;
   }
 
   const SAVE_DELAY = 200;
@@ -409,8 +387,8 @@
   onMount(async () => {
     loadNotes();
 
-    // Check for updates on app start (don't block)
-    checkForUpdates();
+    // Silent auto-update check (downloads in background, installs on next restart)
+    checkAndDownloadUpdate();
 
     // Listen for export requests from popup windows
     unlistenExport = await listen<{ id: string; title: string; content: string }>('export-note', async (event) => {
@@ -455,25 +433,6 @@
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="main-window" onmousemove={handleMouseMove}>
-  <!-- Update Banner -->
-  {#if updateAvailable}
-    <div class="update-banner">
-      <span class="update-text">
-        Version {updateVersion} is available
-      </span>
-      <div class="update-actions">
-        <button class="update-btn" onclick={installUpdate} disabled={isUpdating}>
-          {isUpdating ? 'Updating...' : 'Update now'}
-        </button>
-        <button class="dismiss-btn" onclick={dismissUpdate} aria-label="Dismiss">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M18 6L6 18M6 6l12 12"/>
-          </svg>
-        </button>
-      </div>
-    </div>
-  {/if}
-
   <!-- Title Bar -->
   <TitleBar
     {viewMode}
@@ -871,67 +830,4 @@
     height: 16px;
   }
 
-  /* Update Banner */
-  .update-banner {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 16px;
-    padding: 8px 16px;
-    background: var(--accent);
-    color: white;
-    font-size: 13px;
-    flex-shrink: 0;
-  }
-
-  .update-text {
-    font-weight: 500;
-  }
-
-  .update-actions {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .update-btn {
-    padding: 4px 12px;
-    background: white;
-    color: var(--accent);
-    border: none;
-    border-radius: 4px;
-    font-size: 12px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 150ms ease;
-  }
-
-  .update-btn:hover:not(:disabled) {
-    background: rgba(255, 255, 255, 0.9);
-  }
-
-  .update-btn:disabled {
-    opacity: 0.7;
-    cursor: not-allowed;
-  }
-
-  .dismiss-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 24px;
-    height: 24px;
-    background: transparent;
-    border: none;
-    color: white;
-    opacity: 0.7;
-    cursor: pointer;
-    border-radius: 4px;
-    transition: all 150ms ease;
-  }
-
-  .dismiss-btn:hover {
-    opacity: 1;
-    background: rgba(255, 255, 255, 0.1);
-  }
-</style>
+  </style>
