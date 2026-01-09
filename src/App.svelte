@@ -3,18 +3,21 @@
   import './app.css';
   import CaptureWindow from './lib/windows/CaptureWindow.svelte';
   import MainWindow from './lib/windows/MainWindow.svelte';
+  import NoteWindow from './lib/windows/NoteWindow.svelte';
   import { cleanupEmptyNotes } from './lib/api';
 
   // Svelte 5 state for window type
-  let windowType: 'capture' | 'main' = $state('main');
+  let windowType: 'capture' | 'main' | 'note' = $state('main');
 
   // Media query for dark mode detection
   let darkModeQuery: MediaQueryList | null = null;
 
-  function getWindowTypeFromUrl(): 'capture' | 'main' {
+  function getWindowTypeFromUrl(): 'capture' | 'main' | 'note' {
     const params = new URLSearchParams(window.location.search);
     const windowParam = params.get('window');
-    return windowParam === 'capture' ? 'capture' : 'main';
+    if (windowParam === 'capture') return 'capture';
+    if (windowParam === 'note') return 'note';
+    return 'main';
   }
 
   function applyDarkMode(isDark: boolean) {
@@ -61,6 +64,8 @@
 
 {#if windowType === 'capture'}
   <CaptureWindow />
+{:else if windowType === 'note'}
+  <NoteWindow />
 {:else}
   <MainWindow />
 {/if}

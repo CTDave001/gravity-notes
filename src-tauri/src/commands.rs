@@ -1,6 +1,6 @@
 use crate::storage::{
-    self, count_words, ensure_notes_dir, extract_preview, extract_title,
-    generate_note_filename, is_note_empty, NoteMeta,
+    self, count_words, ensure_images_dir, ensure_notes_dir, extract_preview, extract_title,
+    generate_image_filename, generate_note_filename, get_images_dir, is_note_empty, NoteMeta,
 };
 use std::fs;
 use std::time::UNIX_EPOCH;
@@ -182,4 +182,22 @@ pub async fn cleanup_empty_notes(app: AppHandle, max_age_minutes: u64) -> Result
     }
 
     Ok(deleted)
+}
+
+#[tauri::command]
+pub async fn save_image(app: AppHandle, data: Vec<u8>, extension: String) -> Result<String, String> {
+    let images_dir = ensure_images_dir(&app)?;
+    let filename = generate_image_filename(&extension);
+    let path = images_dir.join(&filename);
+
+    fs::write(&path, data).map_err(|e| e.to_string())?;
+
+    // Return the filename (not full path) for use in markdown
+    Ok(filename)
+}
+
+#[tauri::command]
+pub async fn get_images_path(app: AppHandle) -> Result<String, String> {
+    let images_dir = get_images_dir(&app);
+    Ok(images_dir.to_string_lossy().to_string())
 }

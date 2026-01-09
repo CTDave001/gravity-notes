@@ -4,13 +4,20 @@
   "description": "enables the default permissions",
   "windows": [
     "main",
-    "capture"
+    "capture-*",
+    "note-*"
   ],
   "permissions": [
     "core:default",
     "core:window:allow-create",
     "core:window:allow-close",
+    "core:window:allow-destroy",
+    "core:window:allow-hide",
+    "core:window:allow-show",
+    "core:window:allow-minimize",
     "core:window:allow-set-focus",
+    "core:window:allow-start-dragging",
+    "core:window:allow-start-resize-dragging",
     "fs:default",
     "fs:allow-read",
     "fs:allow-write",
@@ -18,6 +25,17 @@
     "fs:allow-mkdir",
     "fs:allow-remove",
     "fs:allow-rename",
+    {
+      "identifier": "fs:allow-read",
+      "allow": [{ "path": "$APPDATA/**" }]
+    },
+    {
+      "identifier": "fs:allow-write",
+      "allow": [{ "path": "$APPDATA/**" }]
+    },
+    "core:webview:allow-create-webview-window",
+    "core:webview:allow-webview-position",
+    "core:webview:allow-set-webview-focus",
     "shell:allow-open",
     "global-shortcut:default",
     "global-shortcut:allow-register",

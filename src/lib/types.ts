@@ -12,4 +12,6 @@ export interface NoteMeta {
 export interface EditorStats {
   wordCount: number;
   charCount: number;
+  line: number;
+  column: number;
 }

@@ -30,9 +30,9 @@
   }
 </script>
 
-<div class="search-bar relative">
+<div class="search-bar">
   <svg
-    class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-surface-400"
+    class="search-icon"
     fill="none"
     stroke="currentColor"
     viewBox="0 0 24 24"
@@ -46,21 +46,83 @@
   </svg>
   <input
     type="text"
+    class="search-input"
     {placeholder}
     {value}
     oninput={handleInput}
     onkeydown={handleKeydown}
-    class="w-full pl-10 pr-8 py-2 text-sm bg-surface-100 dark:bg-surface-900 border border-surface-200 dark:border-surface-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent text-surface-900 dark:text-surface-100 placeholder-surface-400"
   />
   {#if value}
     <button
-      class="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-surface-400 hover:text-surface-600 dark:hover:text-surface-300"
+      class="clear-btn"
       onclick={handleClear}
       aria-label="Clear search"
     >
-      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
       </svg>
     </button>
   {/if}
 </div>
+
+<style>
+  .search-bar {
+    position: relative;
+    display: flex;
+    align-items: center;
+  }
+
+  .search-icon {
+    position: absolute;
+    left: 12px;
+    width: 16px;
+    height: 16px;
+    color: var(--text-muted);
+    pointer-events: none;
+  }
+
+  .search-input {
+    width: 100%;
+    padding: 10px 32px 10px 38px;
+    font-size: 13px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    color: var(--text-primary);
+    transition: all 150ms ease;
+  }
+
+  .search-input::placeholder {
+    color: var(--text-muted);
+  }
+
+  .search-input:hover {
+    border-color: var(--text-muted);
+  }
+
+  .search-input:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-muted);
+  }
+
+  .clear-btn {
+    position: absolute;
+    right: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px;
+    border: none;
+    background: transparent;
+    border-radius: 4px;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 150ms ease;
+  }
+
+  .clear-btn:hover {
+    background: var(--hover-bg);
+    color: var(--text-primary);
+  }
+</style>

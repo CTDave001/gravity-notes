@@ -1,14 +1,16 @@
+mod clipper;
 mod commands;
 mod export;
 mod storage;
 
+use clipper::clip_to_markdown;
 use commands::*;
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Manager, WebviewUrl, WebviewWindowBuilder,
+    AppHandle, Manager, RunEvent, WebviewUrl, WebviewWindowBuilder, WindowEvent,
 };
-use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut};
+use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 
 fn create_capture_window(app: &AppHandle) {
     let window_label = format!("capture-{}", std::time::SystemTime::now()
@@ -18,15 +20,26 @@ fn create_capture_window(app: &AppHandle) {
 
     let url = WebviewUrl::App("index.html?window=capture".into());
 
-    if let Err(e) = WebviewWindowBuilder::new(app, &window_label, url)
+    match WebviewWindowBuilder::new(app, &window_label, url)
         .title("Quick Capture")
         .inner_size(500.0, 400.0)
+        .min_inner_size(300.0, 200.0)
         .center()
         .resizable(true)
-        .always_on_top(true)
+        .decorations(false)
+        .transparent(true)
+        .shadow(false)
+        .visible(false)
         .build()
     {
-        log::error!("Failed to create capture window: {}", e);
+        Ok(window) => {
+            // Show and focus after a tiny delay to ensure it's ready
+            let _ = window.show();
+            let _ = window.set_focus();
+        }
+        Err(e) => {
+            log::error!("Failed to create capture window: {}", e);
+        }
     }
 }
 
@@ -43,6 +56,8 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_store::Builder::default().build())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .setup(|app| {
             if cfg!(debug_assertions) {
@@ -56,15 +71,30 @@ pub fn run() {
             // Register global shortcuts
             let capture_shortcut = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::ALT), Code::KeyN);
             let focus_shortcut = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::ALT), Code::KeyG);
+            let clip_shortcut = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::ALT), Code::KeyV);
 
             let app_handle = app.handle().clone();
-            app.global_shortcut().on_shortcut(capture_shortcut, move |_app, _shortcut, _event| {
-                create_capture_window(&app_handle);
+            app.global_shortcut().on_shortcut(capture_shortcut, move |_app, _shortcut, event| {
+                if event.state == ShortcutState::Pressed {
+                    create_capture_window(&app_handle);
+                }
             })?;
 
             let app_handle = app.handle().clone();
-            app.global_shortcut().on_shortcut(focus_shortcut, move |_app, _shortcut, _event| {
-                focus_main_window(&app_handle);
+            app.global_shortcut().on_shortcut(focus_shortcut, move |_app, _shortcut, event| {
+                if event.state == ShortcutState::Pressed {
+                    focus_main_window(&app_handle);
+                }
+            })?;
+
+            // Web clipper: Ctrl+Alt+V - converts clipboard HTML to Markdown
+            app.global_shortcut().on_shortcut(clip_shortcut, move |_app, _shortcut, event| {
+                if event.state == ShortcutState::Pressed {
+                    match clip_to_markdown() {
+                        Ok(_) => log::info!("Clipboard converted to Markdown"),
+                        Err(e) => log::error!("Clip to markdown failed: {}", e),
+                    }
+                }
             })?;
 
             // System tray
@@ -112,9 +142,29 @@ pub fn run() {
             list_notes,
             delete_if_empty,
             cleanup_empty_notes,
+            save_image,
+            get_images_path,
             export::export_note_file,
+            export::export_pdf,
             export::get_downloads_dir,
+            export::reveal_in_folder,
+            clip_to_markdown,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .on_window_event(|window, event| {
+            // Hide main window instead of closing it
+            if let WindowEvent::CloseRequested { api, .. } = event {
+                if window.label() == "main" {
+                    window.hide().unwrap();
+                    api.prevent_close();
+                }
+            }
+        })
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|_app, event| {
+            // Prevent app from exiting when all windows are closed
+            if let RunEvent::ExitRequested { api, .. } = event {
+                api.prevent_exit();
+            }
+        });
 }

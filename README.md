@@ -1,47 +1,113 @@
-# Svelte + TS + Vite
+# Gravity
 
-This template should help get you started developing with Svelte and TypeScript in Vite.
+A minimal, beautiful note-taking app that stays out of your way.
 
-## Recommended IDE Setup
+![Gravity Notes](https://img.shields.io/badge/version-1.0.0-blue)
+![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)
+![License](https://img.shields.io/badge/license-MIT-green)
 
-[VS Code](https://code.visualstudio.com/) + [Svelte](https://marketplace.visualstudio.com/items?itemName=svelte.svelte-vscode).
+## Features
 
-## Need an official Svelte framework?
+- **Distraction-free writing** - Clean, minimal interface focused on your content
+- **Quick capture** - Global hotkey (`Ctrl+Shift+N`) to instantly capture thoughts
+- **Pop-out notes** - Open notes in separate floating windows
+- **Auto-save** - Never lose your work with automatic saving
+- **Live sync** - Changes sync instantly across all open windows
+- **Markdown support** - Write in Markdown with syntax highlighting
+- **Dark mode** - Easy on the eyes with automatic theme support
+- **Card view** - Visual overview of all your notes with expandable previews
+- **Search** - Find notes quickly with instant search
+- **Export** - Export notes as Markdown or PDF
+- **Minimal sidebar** - Auto-hiding sidebar that appears on hover
+- **Cross-platform** - Works on Windows, macOS, and Linux
 
-Check out [SvelteKit](https://github.com/sveltejs/kit#readme), which is also powered by Vite. Deploy anywhere with its serverless-first approach and adapt to various platforms, with out of the box support for TypeScript, SCSS, and Less, and easily-added support for mdsvex, GraphQL, PostCSS, Tailwind CSS, and more.
+## Installation
 
-## Technical considerations
+### Download
 
-**Why use this over SvelteKit?**
+Download the latest release for your platform from the [Releases](https://github.com/yourusername/gravity-notes/releases) page:
 
-- It brings its own routing solution which might not be preferable for some users.
-- It is first and foremost a framework that just happens to use Vite under the hood, not a Vite app.
+- **Windows**: `Gravity_x.x.x_x64-setup.exe` or `.msi`
+- **macOS**: `Gravity_x.x.x_aarch64.dmg` (Apple Silicon) or `Gravity_x.x.x_x64.dmg` (Intel)
+- **Linux**: `.deb`, `.rpm`, or `.AppImage`
 
-This template contains as little as possible to get started with Vite + TypeScript + Svelte, while taking into account the developer experience with regards to HMR and intellisense. It demonstrates capabilities on par with the other `create-vite` templates and is a good starting point for beginners dipping their toes into a Vite + Svelte project.
+### Build from Source
 
-Should you later need the extended capabilities and extensibility provided by SvelteKit, the template has been structured similarly to SvelteKit so that it is easy to migrate.
+Requirements:
+- [Node.js](https://nodejs.org/) 18+
+- [Rust](https://rustup.rs/) 1.70+
+- [Tauri Prerequisites](https://v2.tauri.app/start/prerequisites/)
 
-**Why `global.d.ts` instead of `compilerOptions.types` inside `jsconfig.json` or `tsconfig.json`?**
+```bash
+# Clone the repository
+git clone https://github.com/yourusername/gravity-notes.git
+cd gravity-notes
 
-Setting `compilerOptions.types` shuts out all other types not explicitly listed in the configuration. Using triple-slash references keeps the default TypeScript setting of accepting type information from the entire workspace, while also adding `svelte` and `vite/client` type information.
+# Install dependencies
+npm install
 
-**Why include `.vscode/extensions.json`?**
+# Run in development mode
+npm run tauri dev
 
-Other templates indirectly recommend extensions via the README, but this file allows VS Code to prompt the user to install the recommended extension upon opening the project.
-
-**Why enable `allowJs` in the TS template?**
-
-While `allowJs: false` would indeed prevent the use of `.js` files in the project, it does not prevent the use of JavaScript syntax in `.svelte` files. In addition, it would force `checkJs: false`, bringing the worst of both worlds: not being able to guarantee the entire codebase is TypeScript, and also having worse typechecking for the existing JavaScript. In addition, there are valid use cases in which a mixed codebase may be relevant.
-
-**Why is HMR not preserving my local component state?**
-
-HMR state preservation comes with a number of gotchas! It has been disabled by default in both `svelte-hmr` and `@sveltejs/vite-plugin-svelte` due to its often surprising behavior. You can read the details [here](https://github.com/rixo/svelte-hmr#svelte-hmr).
-
-If you have state that's important to retain within a component, consider creating an external store which would not be replaced by HMR.
-
-```ts
-// store.ts
-// An extremely simple external store
-import { writable } from 'svelte/store'
-export default writable(0)
+# Build for production
+npm run tauri build
 ```
+
+The built application will be in `src-tauri/target/release/bundle/`.
+
+## Usage
+
+### Keyboard Shortcuts
+
+| Shortcut | Action |
+|----------|--------|
+| `Ctrl+Shift+N` | Quick capture (global) |
+| `Ctrl+N` | New note |
+| `Ctrl+W` | Close window |
+| `Ctrl+F` | Search notes |
+| `Escape` | Close popout/capture window |
+
+### Editor Shortcuts
+
+| Shortcut | Action |
+|----------|--------|
+| `Ctrl+B` | Bold |
+| `Ctrl+I` | Italic |
+| `Ctrl+K` | Link |
+
+### Quick Capture
+
+Press `Ctrl+Shift+N` from anywhere to open a floating capture window. Write your thought and close - it automatically saves and syncs to your notes.
+
+### Pop-out Windows
+
+Double-click any note in the sidebar or card view to open it in a separate floating window. Great for reference while working in other apps.
+
+## Tech Stack
+
+- [Tauri v2](https://v2.tauri.app/) - Rust-based desktop framework
+- [Svelte 5](https://svelte.dev/) - Reactive UI framework
+- [CodeMirror 6](https://codemirror.net/) - Extensible code editor
+- [Tailwind CSS v4](https://tailwindcss.com/) - Utility-first CSS
+
+## Data Storage
+
+Notes are stored locally on your machine:
+
+- **Windows**: `%APPDATA%\Gravity\notes\`
+- **macOS**: `~/Library/Application Support/Gravity/notes/`
+- **Linux**: `~/.local/share/Gravity/notes/`
+
+Each note is saved as a `.md` file, so you can access them directly if needed.
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+## License
+
+MIT License - see [LICENSE](LICENSE) for details.
+
+---
+
+Made with care for writers who value simplicity.

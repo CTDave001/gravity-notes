@@ -53,12 +53,12 @@ pub fn extract_preview(content: &str) -> String {
     let preview: String = content
         .lines()
         .filter(|line| !line.trim().is_empty())
-        .take(3)
+        .take(15)
         .collect::<Vec<_>>()
-        .join(" ");
+        .join("\n");
 
-    if preview.len() > 150 {
-        format!("{}...", &preview[..147])
+    if preview.len() > 800 {
+        format!("{}...", &preview[..797])
     } else {
         preview
     }
@@ -70,4 +70,22 @@ pub fn count_words(content: &str) -> usize {
 
 pub fn is_note_empty(content: &str) -> bool {
     content.trim().is_empty()
+}
+
+pub fn get_images_dir(app: &AppHandle) -> PathBuf {
+    let app_data = app.path().app_data_dir().expect("Failed to get app data dir");
+    app_data.join("images")
+}
+
+pub fn ensure_images_dir(app: &AppHandle) -> Result<PathBuf, String> {
+    let images_dir = get_images_dir(app);
+    if !images_dir.exists() {
+        fs::create_dir_all(&images_dir).map_err(|e| e.to_string())?;
+    }
+    Ok(images_dir)
+}
+
+pub fn generate_image_filename(extension: &str) -> String {
+    let now = Local::now();
+    now.format(&format!("%Y-%m-%d_%H-%M-%S-%3f.{}", extension)).to_string()
 }
