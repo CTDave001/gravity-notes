@@ -25,7 +25,7 @@ A minimal, beautiful note-taking app that stays out of your way.
 
 ### Download
 
-Download the latest release for your platform from the [Releases](https://github.com/yourusername/gravity-notes/releases) page:
+Download the latest release for your platform from the [Releases](https://github.com/CTDave001/gravity-notes/releases) page:
 
 - **Windows**: `Gravity_x.x.x_x64-setup.exe` or `.msi`
 - **macOS**: `Gravity_x.x.x_aarch64.dmg` (Apple Silicon) or `Gravity_x.x.x_x64.dmg` (Intel)
@@ -40,7 +40,7 @@ Requirements:
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/gravity-notes.git
+git clone https://github.com/CTDave001/gravity-notes.git
 cd gravity-notes
 
 # Install dependencies

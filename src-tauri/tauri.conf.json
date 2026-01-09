@@ -47,7 +47,7 @@
   "plugins": {
     "updater": {
       "endpoints": [
-        "https://github.com/yourusername/gravity-notes/releases/latest/download/latest.json"
+        "https://github.com/CTDave001/gravity-notes/releases/latest/download/latest.json"
       ],
       "pubkey": ""
     }
