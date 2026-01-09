@@ -27,13 +27,10 @@ fn create_capture_window(app: &AppHandle) {
         .center()
         .resizable(true)
         .decorations(false)
-        .transparent(true)
-        .shadow(false)
         .visible(false)
         .build()
     {
         Ok(window) => {
-            // Show and focus after a tiny delay to ensure it's ready
             let _ = window.show();
             let _ = window.set_focus();
         }
