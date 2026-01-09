@@ -42,14 +42,14 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "createUpdaterArtifacts": false
+    "createUpdaterArtifacts": true
   },
   "plugins": {
     "updater": {
       "endpoints": [
         "https://github.com/CTDave001/gravity-notes/releases/latest/download/latest.json"
       ],
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDU1QjlDNjI5MUQxNjQzNzcKUldSM1F4WWRLY2E1VlNTR1NkdzhjWmNnYmk3UUpGWnNvQWxYbmZSSTlJOUxDT09KVEFjc1RCU28K"
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDlGQzQ2N0VCQTAyNDQwODEKUldTQlFDU2c2MmZFbjZlQXRFM1lxZHZyWmZoZHZzSEUzbldZK3Z2RWdRc3hMQnpITzE2R3VwQjMK"
     }
   }
 }
