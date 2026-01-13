@@ -27,6 +27,8 @@ fn create_capture_window(app: &AppHandle) {
         .center()
         .resizable(true)
         .decorations(false)
+        .transparent(true)
+        .shadow(false)
         .visible(false)
         .build()
     {

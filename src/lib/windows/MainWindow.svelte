@@ -10,6 +10,7 @@
   import HelpModal from '../components/HelpModal.svelte';
   import TitleBar from '../components/TitleBar.svelte';
   import Toast from '../components/Toast.svelte';
+  import DeleteToast from '../components/DeleteToast.svelte';
   import CardView from '../components/CardView.svelte';
   import { listNotes, getNote, saveNote, createNote, deleteNote } from '../api';
   import type { NoteMeta, EditorStats } from '../types';
@@ -33,6 +34,11 @@
   // Toast state
   let showToast: boolean = $state(false);
   let toastFilePath: string = $state('');
+
+  // Delete toast state
+  let showDeleteToast: boolean = $state(false);
+  let deletedNoteTitle: string = $state('');
+  let deletedNoteContent: string = $state('');
 
   // Sidebar state - visible on app start
   let sidebarVisible: boolean = $state(true);
@@ -359,6 +365,10 @@
     if (selectedNote) {
       stopPolling();
 
+      // Store note data for potential undo
+      deletedNoteTitle = selectedNote.title || 'Untitled';
+      deletedNoteContent = content;
+
       try {
         await deleteNote(selectedNote.id);
         selectedNote = null;
@@ -368,10 +378,38 @@
         saved = true;
         isEditing = false;
         await loadNotes();
+
+        // Show delete toast with undo option
+        showDeleteToast = true;
       } catch (err) {
         console.error('Failed to delete note:', err);
       }
     }
+  }
+
+  async function handleUndoDelete() {
+    showDeleteToast = false;
+
+    if (deletedNoteContent) {
+      try {
+        // Create a new note with the deleted content
+        const newNote = await createNote();
+        await saveNote(newNote.id, deletedNoteContent);
+        await loadNotes();
+
+        // Select the restored note
+        const restoredNote = notes.find(n => n.id === newNote.id);
+        if (restoredNote) {
+          await handleSelectNote(restoredNote);
+        }
+      } catch (err) {
+        console.error('Failed to restore note:', err);
+      }
+    }
+
+    // Clear deleted note data
+    deletedNoteTitle = '';
+    deletedNoteContent = '';
   }
 
   function toggleViewMode() {
@@ -570,6 +608,14 @@
   message="File saved to Downloads"
   filePath={toastFilePath}
   onclose={() => showToast = false}
+/>
+
+<!-- Delete toast with undo -->
+<DeleteToast
+  show={showDeleteToast}
+  noteTitle={deletedNoteTitle}
+  onundo={handleUndoDelete}
+  onclose={() => { showDeleteToast = false; deletedNoteTitle = ''; deletedNoteContent = ''; }}
 />
 
 <!-- Help Modal -->
