@@ -20,17 +20,20 @@ fn create_capture_window(app: &AppHandle) {
 
     let url = WebviewUrl::App("index.html?window=capture".into());
 
-    match WebviewWindowBuilder::new(app, &window_label, url)
+    let builder = WebviewWindowBuilder::new(app, &window_label, url)
         .title("Quick Capture")
         .inner_size(500.0, 400.0)
         .min_inner_size(300.0, 200.0)
         .center()
         .resizable(true)
         .decorations(false)
-        .transparent(true)
-        .shadow(false)
-        .visible(false)
-        .build()
+        .visible(false);
+
+    // Transparent windows work on Windows and macOS (with macos-private-api feature)
+    #[cfg(any(target_os = "windows", target_os = "macos"))]
+    let builder = builder.transparent(true).shadow(false);
+
+    match builder.build()
     {
         Ok(window) => {
             let _ = window.show();
