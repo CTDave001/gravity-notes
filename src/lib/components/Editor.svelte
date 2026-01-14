@@ -231,22 +231,17 @@
     if (pasteToastTimeout) clearTimeout(pasteToastTimeout);
   }
 
-  // Check if HTML is just plain text wrapped in basic tags (not worth converting)
+  // Check if HTML conversion would produce meaningfully different output than plain text
   function isPlainTextHtml(html: string, plainText: string): boolean {
-    // If there's no meaningful difference, skip conversion
-    const tempDiv = document.createElement('div');
-    tempDiv.innerHTML = html;
-    const extractedText = tempDiv.textContent || tempDiv.innerText || '';
+    // Convert HTML to markdown
+    const markdown = cleanMarkdown(turndownService.turndown(html));
 
-    // If the extracted text is basically the same as plain text, it's trivial HTML
-    const normalizedExtracted = extractedText.trim().replace(/\s+/g, ' ');
+    // Normalize both for comparison (collapse whitespace, trim)
+    const normalizedMarkdown = markdown.trim().replace(/\s+/g, ' ');
     const normalizedPlain = plainText.trim().replace(/\s+/g, ' ');
 
-    // Check for meaningful formatting tags
-    const hasFormattingTags = /<(table|thead|tbody|tr|td|th|ul|ol|li|h[1-6]|strong|b|em|i|a|code|pre|blockquote)[^>]*>/i.test(html);
-
-    // If no formatting tags and text is the same, it's plain text HTML
-    return !hasFormattingTags && normalizedExtracted === normalizedPlain;
+    // If the markdown output is essentially the same as plain text, no point showing toast
+    return normalizedMarkdown === normalizedPlain;
   }
 
   // Markdown formatting commands
