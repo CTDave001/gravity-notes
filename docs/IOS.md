@@ -32,9 +32,10 @@ generated iOS project.
 ## Build on GitHub and test on an iPhone
 
 The `.github/workflows/ios-testflight.yml` workflow validates the application,
-builds and signs it on a GitHub-hosted Mac, preserves the IPA as a private
-workflow artifact, and optionally uploads it to TestFlight. It is manual-only so
-a normal push cannot publish an iOS build.
+builds and signs it on a GitHub-hosted macOS 26 runner with the App Store's
+required Xcode 26/iOS 26 SDK, preserves the IPA as a private workflow artifact,
+and optionally uploads it to TestFlight. It is manual-only so a normal push
+cannot publish an iOS build.
 
 ### One-time Apple setup
 

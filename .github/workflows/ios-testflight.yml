@@ -57,7 +57,8 @@ jobs:
 
   build:
     needs: validate
-    runs-on: macos-15
+    # Apple requires uploads to use the iOS 26 SDK from Xcode 26 or later.
+    runs-on: macos-26
     timeout-minutes: 60
     environment: testflight
     env:
