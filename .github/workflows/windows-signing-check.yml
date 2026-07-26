@@ -13,12 +13,27 @@ jobs:
       - name: Install Azure Artifact Signing client
         run: cargo install artifact-signing-cli --version 0.11.0 --locked
 
+      - name: Log in to Azure for Artifact Signing
+        uses: azure/login@v3
+        with:
+          creds: '{"clientId":"${{ secrets.AZURE_CLIENT_ID }}","clientSecret":"${{ secrets.AZURE_CLIENT_SECRET }}","tenantId":"${{ secrets.AZURE_TENANT_ID }}","subscriptionId":"${{ secrets.AZURE_SUBSCRIPTION_ID }}"}'
+
+      - name: Configure Artifact Signing to reuse the Azure session
+        shell: pwsh
+        run: |
+          Set-Content `
+            -LiteralPath "$env:RUNNER_TEMP\artifact-signing-azure-session.cmd" `
+            -Value "@echo off`r`nexit /b 0`r`n" `
+            -NoNewline `
+            -Encoding ascii
+
       - name: Sign and verify a disposable executable
         shell: pwsh
         env:
           AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
           AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
           AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLI_PATH: ${{ runner.temp }}\artifact-signing-azure-session.cmd
         run: |
           $probe = Join-Path $env:RUNNER_TEMP "gravity-signing-probe.exe"
           Copy-Item "$env:WINDIR\System32\where.exe" $probe

@@ -11,6 +11,7 @@ Releases are created by `.github/workflows/release.yml` when a `v*` tag is pushe
 | `AZURE_CLIENT_ID` | Azure Artifact Signing authentication on Windows |
 | `AZURE_CLIENT_SECRET` | Azure Artifact Signing authentication on Windows |
 | `AZURE_TENANT_ID` | Azure tenant used by Artifact Signing |
+| `AZURE_SUBSCRIPTION_ID` | Azure subscription containing the signing account |
 
 `GITHUB_TOKEN` is supplied automatically by GitHub Actions. The Windows signing account, certificate profile, and endpoint are configured in `src-tauri/tauri.windows-signing.conf.json`.
 
@@ -84,7 +85,11 @@ reported without waiting for a full Windows application build.
 
 Tauri updater signing verifies that a downloaded update was produced by the project. Windows Authenticode signing verifies the installer publisher to Windows. They are separate signatures.
 
-Windows Authenticode signing runs inside Tauri's bundle step through `artifact-signing-cli`. Do not add a post-build installer-signing step: changing an installer after Tauri creates its updater signature can invalidate the update.
+Windows Authenticode signing runs inside Tauri's bundle step through
+`artifact-signing-cli`. The official Azure login action establishes the CLI session
+first; the signing client then reuses that authenticated session. Do not add a
+post-build installer-signing step: changing an installer after Tauri creates its
+updater signature can invalidate the update.
 
 Never commit private signing keys, passwords, Azure credentials, or generated secret material.
 
