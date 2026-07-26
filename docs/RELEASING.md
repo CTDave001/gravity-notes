@@ -52,6 +52,11 @@ Also verify in the native application:
 - main-window close hides to tray and tray Quit exits;
 - update prompts can be dismissed and do not install without confirmation.
 
+When Azure credentials, role assignments, or the certificate profile have changed,
+run the **Windows Signing Check** workflow manually before tagging. It signs and
+verifies a disposable runner executable so authentication and signing failures are
+reported without waiting for a full Windows application build.
+
 ## Publish procedure
 
 1. Update the version in every location listed above.
@@ -86,3 +91,7 @@ Never commit private signing keys, passwords, Azure credentials, or generated se
 ## Recovery
 
 If one matrix build fails, leave the release as a draft, correct the failure, and rerun the workflow. Do not publish a partial release or manually construct `latest.json` with guessed URLs or signature contents.
+
+For Windows signing failures, run **Windows Signing Check** first. The workflow
+prints the signing client's direct error output, which the Tauri bundler may
+otherwise summarize as only `failed to run artifact-signing-cli`.

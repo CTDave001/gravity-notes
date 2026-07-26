@@ -90,7 +90,7 @@ jobs:
 
       - name: Install Azure Artifact Signing client
         if: matrix.platform == 'windows-latest'
-        run: cargo install artifact-signing-cli --locked
+        run: cargo install artifact-signing-cli --version 0.11.0 --locked
 
       - name: Build, sign, and upload release
         uses: tauri-apps/tauri-action@v0

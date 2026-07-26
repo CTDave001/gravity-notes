@@ -1,0 +1,36 @@
+name: Windows Signing Check
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: windows-latest
+    steps:
+      - name: Install Azure Artifact Signing client
+        run: cargo install artifact-signing-cli --version 0.11.0 --locked
+
+      - name: Sign and verify a disposable executable
+        shell: pwsh
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+        run: |
+          $probe = Join-Path $env:RUNNER_TEMP "gravity-signing-probe.exe"
+          Copy-Item "$env:WINDIR\System32\where.exe" $probe
+
+          artifact-signing-cli `
+            -e https://wus.codesigning.azure.net `
+            -a gravity-signing-account1 `
+            -c gravity-certificate `
+            -d "Gravity signing check" `
+            $probe
+
+          $signature = Get-AuthenticodeSignature $probe
+          if ($signature.Status -ne "Valid") {
+            throw "Artifact Signing returned an invalid signature: $($signature.StatusMessage)"
+          }
