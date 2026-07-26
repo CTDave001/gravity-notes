@@ -40,7 +40,7 @@ pub fn validate_note_id(id: &str) -> Result<(), String> {
         && components.next().is_none()
         && path.file_name() == Some(OsStr::new(id));
 
-    if id.is_empty() || !is_single_filename || id == "." || id == ".." {
+    if id.is_empty() || id.contains(['/', '\\']) || !is_single_filename || id == "." || id == ".." {
         return Err("Invalid note ID".to_string());
     }
 

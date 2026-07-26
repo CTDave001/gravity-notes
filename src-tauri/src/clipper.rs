@@ -59,6 +59,7 @@ fn get_clipboard_html() -> Option<String> {
 }
 
 /// Extract actual HTML from CF_HTML format (which has headers)
+#[cfg(target_os = "windows")]
 fn extract_html_from_cf_html(cf_html: &str) -> Option<String> {
     // CF_HTML format has headers like:
     // Version:0.9
