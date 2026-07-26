@@ -71,12 +71,14 @@
     show = false,
     noteTitle = 'Untitled',
     noteContent = '',
+    mobile = false,
     onclose,
     onsuccess,
   }: {
     show?: boolean;
     noteTitle?: string;
     noteContent?: string;
+    mobile?: boolean;
     onclose?: () => void;
     onsuccess?: (path: string) => void;
   } = $props();
@@ -1114,8 +1116,6 @@
     isExporting = true;
 
     try {
-      const downloadsDir: string = await invoke('get_downloads_dir');
-
       // Sanitize filename
       const safeFilename = (noteTitle || 'Untitled')
         .replace(/[<>:"/\\|?*]/g, '_')
@@ -1123,22 +1123,59 @@
 
       let outputPath: string;
 
-      if (selectedFormat === 'pdf') {
-        // Generate PDF (async to load Unicode font if needed)
-        const pdfBytes = await generatePDF(noteContent, noteTitle || 'Untitled');
-        outputPath = await invoke('export_pdf', {
-          content: Array.from(new Uint8Array(pdfBytes)),
-          filename: safeFilename,
-          destination: downloadsDir,
+      if (mobile) {
+        const extension = selectedFormat;
+        const { save } = await import('@tauri-apps/plugin-dialog');
+        const destination = await save({
+          defaultPath: `${safeFilename}.${extension}`,
+          filters: [{
+            name: selectedFormat === 'pdf'
+              ? 'PDF document'
+              : selectedFormat === 'md'
+                ? 'Markdown document'
+                : 'Text document',
+            extensions: [extension],
+          }],
         });
+
+        if (!destination) {
+          return;
+        }
+
+        const { writeFile } = await import('@tauri-apps/plugin-fs');
+        let bytes: Uint8Array;
+        if (selectedFormat === 'pdf') {
+          bytes = await generatePDF(noteContent, noteTitle || 'Untitled');
+        } else {
+          const exportedContent = selectedFormat === 'txt'
+            ? noteContent
+                .split('\n')
+                .map((line) => line.replace(/^#+/, '').trim())
+                .join('\n')
+            : noteContent;
+          bytes = new TextEncoder().encode(exportedContent);
+        }
+        await writeFile(destination, bytes);
+        outputPath = destination;
       } else {
-        // Export as text/markdown
-        outputPath = await invoke('export_note_file', {
-          content: noteContent,
-          filename: safeFilename,
-          format: selectedFormat,
-          destination: downloadsDir,
-        });
+        const downloadsDir: string = await invoke('get_downloads_dir');
+        if (selectedFormat === 'pdf') {
+          // Generate PDF (async to load Unicode font if needed)
+          const pdfBytes = await generatePDF(noteContent, noteTitle || 'Untitled');
+          outputPath = await invoke('export_pdf', {
+            content: Array.from(new Uint8Array(pdfBytes)),
+            filename: safeFilename,
+            destination: downloadsDir,
+          });
+        } else {
+          // Export as text/markdown
+          outputPath = await invoke('export_note_file', {
+            content: noteContent,
+            filename: safeFilename,
+            format: selectedFormat,
+            destination: downloadsDir,
+          });
+        }
       }
 
       // Notify success with file path
@@ -1162,11 +1199,11 @@
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
-    class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+    class="export-backdrop fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
     onclick={handleBackdropClick}
   >
     <div
-      class="bg-white dark:bg-surface-900 rounded-xl shadow-xl w-full max-w-lg mx-4 overflow-hidden max-h-[90vh] flex flex-col"
+      class="export-dialog bg-white dark:bg-surface-900 rounded-xl shadow-xl w-full max-w-lg mx-4 overflow-hidden max-h-[90vh] flex flex-col"
       role="dialog"
       aria-modal="true"
       aria-labelledby="export-title"
@@ -1436,7 +1473,7 @@
       </div>
 
       <!-- Footer -->
-      <div class="px-6 py-4 border-t border-surface-200 dark:border-surface-700 flex justify-end gap-3 shrink-0">
+      <div class="export-footer px-6 py-4 border-t border-surface-200 dark:border-surface-700 flex justify-end gap-3 shrink-0">
         <button
           class="px-4 py-2 text-sm font-medium text-surface-600 dark:text-surface-400 hover:bg-surface-100 dark:hover:bg-surface-800 rounded-lg transition-colors"
           onclick={onclose}
@@ -1459,3 +1496,21 @@
     </div>
   </div>
 {/if}
+
+<style>
+  :global(.mobile) .export-backdrop {
+    align-items: flex-end;
+  }
+
+  :global(.mobile) .export-dialog {
+    width: 100%;
+    max-width: none;
+    max-height: calc(100dvh - env(safe-area-inset-top) - 12px);
+    margin: 0;
+    border-radius: 20px 20px 0 0;
+  }
+
+  :global(.mobile) .export-footer {
+    padding-bottom: max(16px, env(safe-area-inset-bottom));
+  }
+</style>

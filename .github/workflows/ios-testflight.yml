@@ -1,0 +1,183 @@
+name: iOS TestFlight
+
+on:
+  workflow_dispatch:
+    inputs:
+      upload_to_testflight:
+        description: Upload the signed IPA to App Store Connect
+        required: true
+        type: boolean
+        default: true
+
+concurrency:
+  group: ios-testflight
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install Linux system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate frontend
+        run: |
+          npm run check
+          npm test
+          npm run build
+
+      - name: Validate Rust
+        working-directory: src-tauri
+        run: |
+          cargo fmt --all -- --check
+          cargo test
+          cargo clippy --all-targets --all-features -- -D warnings
+
+  build:
+    needs: validate
+    runs-on: macos-15
+    timeout-minutes: 60
+    environment: testflight
+    env:
+      APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+      APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+      APPLE_API_KEY_P8_BASE64: ${{ secrets.APPLE_API_KEY_P8_BASE64 }}
+      APPLE_DEVELOPMENT_TEAM: ${{ vars.APPLE_DEVELOPMENT_TEAM }}
+      IOS_BUNDLE_ID: ${{ vars.IOS_BUNDLE_ID }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install Rust stable with iOS targets
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios,aarch64-apple-ios-sim,x86_64-apple-ios
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify Apple build tools and configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild -version
+          pod --version
+
+          missing=0
+          for name in \
+            APPLE_API_ISSUER \
+            APPLE_API_KEY \
+            APPLE_API_KEY_P8_BASE64 \
+            APPLE_DEVELOPMENT_TEAM \
+            IOS_BUNDLE_ID
+          do
+            if [[ -z "${!name:-}" ]]; then
+              echo "::error::$name is not configured in the testflight environment."
+              missing=1
+            fi
+          done
+          exit "$missing"
+
+      - name: Install App Store Connect API key
+        shell: bash
+        run: |
+          set -euo pipefail
+          key_directory="$HOME/.appstoreconnect/private_keys"
+          key_path="$key_directory/AuthKey_${APPLE_API_KEY}.p8"
+          mkdir -p "$key_directory"
+          printf '%s' "$APPLE_API_KEY_P8_BASE64" | base64 --decode > "$key_path"
+          chmod 600 "$key_path"
+
+          if ! grep -q -- 'BEGIN PRIVATE KEY' "$key_path"; then
+            echo "::error::APPLE_API_KEY_P8_BASE64 did not decode to an App Store Connect private key."
+            exit 1
+          fi
+
+          echo "APPLE_API_KEY_PATH=$key_path" >> "$GITHUB_ENV"
+
+      - name: Generate the signed iOS project
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run ios:ci:configure
+          npm run tauri -- ios init --ci --skip-targets-install \
+            --config src-tauri/tauri.ios.ci.conf.json
+          npm run ios:prepare
+
+      - name: Build signed IPA
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run tauri -- ios build --ci \
+            --config src-tauri/tauri.ios.ci.conf.json \
+            --build-number "$GITHUB_RUN_NUMBER" \
+            --export-method app-store-connect
+
+      - name: Locate IPA
+        id: ipa
+        shell: bash
+        run: |
+          set -euo pipefail
+          ipa_path="$(find src-tauri/gen/apple/build -type f -name '*.ipa' -print -quit)"
+          if [[ -z "$ipa_path" ]]; then
+            echo "::error::The iOS build completed without producing an IPA."
+            exit 1
+          fi
+          echo "path=$ipa_path" >> "$GITHUB_OUTPUT"
+
+      - name: Preserve signed IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: Gravity-iOS-${{ github.run_number }}
+          path: ${{ steps.ipa.outputs.path }}
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload to TestFlight
+        if: inputs.upload_to_testflight
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcrun altool \
+            --upload-app \
+            --type ios \
+            --file "${{ steps.ipa.outputs.path }}" \
+            --apiKey "$APPLE_API_KEY" \
+            --apiIssuer "$APPLE_API_ISSUER"
+
+      - name: Report next step
+        if: inputs.upload_to_testflight
+        shell: bash
+        run: |
+          {
+            echo "### TestFlight upload accepted"
+            echo
+            echo "Apple will process build $GITHUB_RUN_NUMBER before it appears in App Store Connect."
+          } >> "$GITHUB_STEP_SUMMARY"

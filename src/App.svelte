@@ -2,6 +2,7 @@
   import { onMount, onDestroy, type Component } from 'svelte';
   import './app.css';
   import { cleanupEmptyNotes } from './lib/api';
+  import { getRuntimeInfo } from './lib/platform';
   import { loadSettings, settings, type Settings } from './lib/stores/settings';
 
   // Svelte 5 state for window type
@@ -54,6 +55,10 @@
   onMount(async () => {
     // Determine window type from URL params
     windowType = getWindowTypeFromUrl();
+
+    const runtime = await getRuntimeInfo();
+    document.documentElement.dataset.platform = runtime.platform;
+    document.documentElement.classList.toggle('mobile', runtime.mobile);
 
     darkModeQuery = window.matchMedia('(prefers-color-scheme: dark)');
     darkModeQuery.addEventListener('change', handleDarkModeChange);

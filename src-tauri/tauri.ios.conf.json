@@ -1,0 +1,29 @@
+{
+  "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
+  "build": {
+    "beforeBuildCommand": "npm run build:ios"
+  },
+  "app": {
+    "macOSPrivateApi": false,
+    "windows": [
+      {
+        "label": "main",
+        "title": "Gravity",
+        "width": 390,
+        "height": 844,
+        "resizable": false,
+        "fullscreen": false,
+        "decorations": true
+      }
+    ]
+  },
+  "bundle": {
+    "createUpdaterArtifacts": false,
+    "iOS": {
+      "minimumSystemVersion": "15.0"
+    }
+  },
+  "plugins": {
+    "updater": null
+  }
+}

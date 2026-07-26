@@ -66,6 +66,11 @@
     background: var(--bg-primary);
   }
 
+  :global(.mobile) .status-bar {
+    height: calc(30px + env(safe-area-inset-bottom));
+    padding: 0 12px env(safe-area-inset-bottom);
+  }
+
   .status-content {
     width: 100%;
     display: flex;

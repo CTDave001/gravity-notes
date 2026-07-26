@@ -1,17 +1,30 @@
+#[cfg(desktop)]
 mod clipper;
 mod commands;
 mod export;
+mod platform;
 mod storage;
 
+#[cfg(desktop)]
 use clipper::clip_to_markdown;
 use commands::*;
+use platform::runtime_info;
+#[cfg(desktop)]
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent,
 };
+#[cfg(desktop)]
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 
+#[cfg(mobile)]
+#[tauri::command]
+fn clip_to_markdown() -> Result<String, String> {
+    Err("Clipboard conversion is only available on desktop".to_string())
+}
+
+#[cfg(desktop)]
 fn create_capture_window(app: &AppHandle) {
     let window_label = format!(
         "capture-{}",
@@ -47,6 +60,7 @@ fn create_capture_window(app: &AppHandle) {
     }
 }
 
+#[cfg(desktop)]
 fn focus_main_window(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.show();
@@ -56,11 +70,20 @@ fn focus_main_window(app: &AppHandle) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
-        .plugin(tauri_plugin_store::Builder::default().build())
+    let builder = tauri::Builder::default().plugin(tauri_plugin_store::Builder::default().build());
+
+    #[cfg(desktop)]
+    let builder = builder
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
-        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build());
+
+    #[cfg(mobile)]
+    let builder = builder
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_fs::init());
+
+    builder
         .setup(|app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(
@@ -70,107 +93,112 @@ pub fn run() {
                 )?;
             }
 
-            // Register global shortcuts
-            let primary_modifier = if cfg!(target_os = "macos") {
-                Modifiers::SUPER
-            } else {
-                Modifiers::CONTROL
-            };
-            let capture_shortcut =
-                Shortcut::new(Some(primary_modifier | Modifiers::ALT), Code::KeyN);
-            let focus_shortcut = Shortcut::new(Some(primary_modifier | Modifiers::ALT), Code::KeyG);
-
-            let app_handle = app.handle().clone();
-            if let Err(error) = app.global_shortcut().on_shortcut(
-                capture_shortcut,
-                move |_app, _shortcut, event| {
-                    if event.state == ShortcutState::Pressed {
-                        create_capture_window(&app_handle);
-                    }
-                },
-            ) {
-                log::warn!("Could not register the quick capture shortcut: {error}");
-            }
-
-            let app_handle = app.handle().clone();
-            if let Err(error) =
-                app.global_shortcut()
-                    .on_shortcut(focus_shortcut, move |_app, _shortcut, event| {
-                        if event.state == ShortcutState::Pressed {
-                            focus_main_window(&app_handle);
-                        }
-                    })
+            #[cfg(desktop)]
             {
-                log::warn!("Could not register the focus shortcut: {error}");
-            }
+                // Register global shortcuts
+                let primary_modifier = if cfg!(target_os = "macos") {
+                    Modifiers::SUPER
+                } else {
+                    Modifiers::CONTROL
+                };
+                let capture_shortcut =
+                    Shortcut::new(Some(primary_modifier | Modifiers::ALT), Code::KeyN);
+                let focus_shortcut =
+                    Shortcut::new(Some(primary_modifier | Modifiers::ALT), Code::KeyG);
 
-            #[cfg(target_os = "windows")]
-            {
-                let clip_shortcut =
-                    Shortcut::new(Some(primary_modifier | Modifiers::ALT), Code::KeyV);
+                let app_handle = app.handle().clone();
                 if let Err(error) = app.global_shortcut().on_shortcut(
-                    clip_shortcut,
+                    capture_shortcut,
                     move |_app, _shortcut, event| {
                         if event.state == ShortcutState::Pressed {
-                            match clip_to_markdown() {
-                                Ok(_) => log::info!("Clipboard converted to Markdown"),
-                                Err(error) => {
-                                    log::error!("Clip to markdown failed: {error}")
-                                }
-                            }
+                            create_capture_window(&app_handle);
                         }
                     },
                 ) {
-                    log::warn!("Could not register the clipboard shortcut: {error}");
+                    log::warn!("Could not register the quick capture shortcut: {error}");
                 }
+
+                let app_handle = app.handle().clone();
+                if let Err(error) = app.global_shortcut().on_shortcut(
+                    focus_shortcut,
+                    move |_app, _shortcut, event| {
+                        if event.state == ShortcutState::Pressed {
+                            focus_main_window(&app_handle);
+                        }
+                    },
+                ) {
+                    log::warn!("Could not register the focus shortcut: {error}");
+                }
+
+                #[cfg(target_os = "windows")]
+                {
+                    let clip_shortcut =
+                        Shortcut::new(Some(primary_modifier | Modifiers::ALT), Code::KeyV);
+                    if let Err(error) = app.global_shortcut().on_shortcut(
+                        clip_shortcut,
+                        move |_app, _shortcut, event| {
+                            if event.state == ShortcutState::Pressed {
+                                match clip_to_markdown() {
+                                    Ok(_) => log::info!("Clipboard converted to Markdown"),
+                                    Err(error) => {
+                                        log::error!("Clip to markdown failed: {error}")
+                                    }
+                                }
+                            }
+                        },
+                    ) {
+                        log::warn!("Could not register the clipboard shortcut: {error}");
+                    }
+                }
+
+                // System tray
+                let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
+                let new_note = MenuItem::with_id(app, "new_note", "New Note", true, None::<&str>)?;
+                let show = MenuItem::with_id(app, "show", "Show Gravity", true, None::<&str>)?;
+
+                let menu = Menu::with_items(app, &[&show, &new_note, &quit])?;
+
+                let mut tray_builder = TrayIconBuilder::new();
+                if let Some(icon) = app.default_window_icon() {
+                    tray_builder = tray_builder.icon(icon.clone());
+                }
+                let _tray = tray_builder
+                    .menu(&menu)
+                    .on_menu_event(move |app, event| match event.id.as_ref() {
+                        "quit" => {
+                            let _ = app.emit("prepare-to-quit", ());
+                            let app_handle = app.clone();
+                            std::thread::spawn(move || {
+                                std::thread::sleep(std::time::Duration::from_millis(750));
+                                app_handle.exit(0);
+                            });
+                        }
+                        "new_note" => {
+                            create_capture_window(app);
+                        }
+                        "show" => {
+                            focus_main_window(app);
+                        }
+                        _ => {}
+                    })
+                    .on_tray_icon_event(|tray, event| {
+                        if let TrayIconEvent::Click {
+                            button: MouseButton::Left,
+                            button_state: MouseButtonState::Up,
+                            ..
+                        } = event
+                        {
+                            let app = tray.app_handle();
+                            focus_main_window(app);
+                        }
+                    })
+                    .build(app)?;
             }
-
-            // System tray
-            let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
-            let new_note = MenuItem::with_id(app, "new_note", "New Note", true, None::<&str>)?;
-            let show = MenuItem::with_id(app, "show", "Show Gravity", true, None::<&str>)?;
-
-            let menu = Menu::with_items(app, &[&show, &new_note, &quit])?;
-
-            let mut tray_builder = TrayIconBuilder::new();
-            if let Some(icon) = app.default_window_icon() {
-                tray_builder = tray_builder.icon(icon.clone());
-            }
-            let _tray = tray_builder
-                .menu(&menu)
-                .on_menu_event(move |app, event| match event.id.as_ref() {
-                    "quit" => {
-                        let _ = app.emit("prepare-to-quit", ());
-                        let app_handle = app.clone();
-                        std::thread::spawn(move || {
-                            std::thread::sleep(std::time::Duration::from_millis(750));
-                            app_handle.exit(0);
-                        });
-                    }
-                    "new_note" => {
-                        create_capture_window(app);
-                    }
-                    "show" => {
-                        focus_main_window(app);
-                    }
-                    _ => {}
-                })
-                .on_tray_icon_event(|tray, event| {
-                    if let TrayIconEvent::Click {
-                        button: MouseButton::Left,
-                        button_state: MouseButtonState::Up,
-                        ..
-                    } = event
-                    {
-                        let app = tray.app_handle();
-                        focus_main_window(app);
-                    }
-                })
-                .build(app)?;
 
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            runtime_info,
             create_note,
             save_note,
             delete_note,
@@ -190,15 +218,21 @@ pub fn run() {
             clip_to_markdown,
         ])
         .on_window_event(|window, event| {
-            // Hide main window instead of closing it
-            if let WindowEvent::CloseRequested { api, .. } = event {
-                if window.label() == "main" {
-                    if let Err(error) = window.hide() {
-                        log::error!("Failed to hide the main window: {error}");
+            #[cfg(desktop)]
+            {
+                // Hide the desktop main window instead of closing it.
+                if let WindowEvent::CloseRequested { api, .. } = event {
+                    if window.label() == "main" {
+                        if let Err(error) = window.hide() {
+                            log::error!("Failed to hide the main window: {error}");
+                        }
+                        api.prevent_close();
                     }
-                    api.prevent_close();
                 }
             }
+
+            #[cfg(mobile)]
+            let _ = (window, event);
         })
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

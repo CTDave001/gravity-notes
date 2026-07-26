@@ -31,7 +31,7 @@ You own them forever.
 - **Global hotkey** - `Ctrl+Alt+N` captures thoughts from anywhere
 - **Auto-save** - Close the window, it's already saved
 - **Local markdown** - Plain `.md` files you control
-- **Zero accounts** - No signup, no cloud, no sync
+- **Zero accounts by default** - No signup or cloud service is required
 - **Dark mode** - Easy on the eyes
 - **Pop-out windows** - Keep notes visible while working
 - **Card view** - Visual overview of all your notes
@@ -73,8 +73,29 @@ Requires [Node.js 20.19+ or 22.12+](https://nodejs.org/) and [Rust](https://rust
 | Windows | `%APPDATA%\com.gravity.app\notes\` |
 | macOS | `~/Library/Application Support/com.gravity.app/notes/` |
 | Linux | `~/.local/share/com.gravity.app/notes/` |
+| iOS | Gravity's private Application Support container |
 
 Plain markdown. Always accessible. Always yours. The exact path is also shown in **Settings → Notes folder**.
+
+## iOS status
+
+The shared application now has an iPhone navigation shell, safe-area handling, mobile-specific Tauri permissions, native Files export, and target-gated desktop integrations. The generated Xcode project and App Store signing assets are intentionally not committed because Tauri creates them per development team.
+
+Finishing an iOS build requires macOS, Xcode, an Apple Developer team, and:
+
+```bash
+npm ci
+npm run ios:init
+npm run ios:dev
+```
+
+See [iOS development and release](docs/IOS.md) for the complete checklist. iOS has not been shipped to the App Store yet.
+
+A physical Mac is not required: the manual **iOS TestFlight** GitHub Actions
+workflow can build and sign on a hosted Mac, retain the IPA, and upload it to
+TestFlight after the protected Apple environment values are configured.
+
+Cross-device sync is not enabled in the app today. The recommended local-first, encrypted design is documented in [Cross-device sync](docs/SYNC.md).
 
 ## Keyboard shortcuts
 
@@ -115,6 +136,8 @@ Current technical documentation:
 
 - [Architecture](docs/ARCHITECTURE.md)
 - [Development and testing](docs/DEVELOPMENT.md)
+- [iOS development and release](docs/IOS.md)
+- [Cross-device sync design](docs/SYNC.md)
 - [Release process](docs/RELEASING.md)
 - [Changelog](CHANGELOG.md)
 - [Security policy](SECURITY.md)

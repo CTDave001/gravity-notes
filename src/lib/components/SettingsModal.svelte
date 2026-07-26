@@ -7,10 +7,12 @@
 
   let {
     show = false,
+    mobile = false,
     onclose,
     onsave,
   }: {
     show?: boolean;
+    mobile?: boolean;
     onclose?: () => void;
     onsave?: (value: Settings) => void;
   } = $props();
@@ -28,7 +30,9 @@
       draft = { ...get(settings) };
       copied = false;
       saveError = '';
-      void getNotesPath().then((path) => notesPath = path);
+      if (!mobile) {
+        void getNotesPath().then((path) => notesPath = path);
+      }
       void tick().then(() => closeButton?.focus());
     }
     wasOpen = show;
@@ -117,22 +121,31 @@
 
         <fieldset>
           <legend>Workspace</legend>
-          <label class="checkbox-row">
-            <span>
-              <strong>Open notes list on launch</strong>
-              <small>You can always toggle it from the title bar.</small>
-            </span>
-            <input type="checkbox" bind:checked={draft.sidebarDefaultOpen} />
-          </label>
-          <div class="path-row">
-            <span>
-              <strong>Notes folder</strong>
-              <small title={notesPath}>{notesPath || 'Loading…'}</small>
-            </span>
-            <button class="secondary-button" onclick={copyPath} disabled={!notesPath}>
-              {copied ? 'Copied' : 'Copy path'}
-            </button>
-          </div>
+          {#if mobile}
+            <div class="path-row">
+              <span>
+                <strong>On this iPhone</strong>
+                <small>Available offline. Cross-device sync is not enabled yet.</small>
+              </span>
+            </div>
+          {:else}
+            <label class="checkbox-row">
+              <span>
+                <strong>Open notes list on launch</strong>
+                <small>You can always toggle it from the title bar.</small>
+              </span>
+              <input type="checkbox" bind:checked={draft.sidebarDefaultOpen} />
+            </label>
+            <div class="path-row">
+              <span>
+                <strong>Notes folder</strong>
+                <small title={notesPath}>{notesPath || 'Loading…'}</small>
+              </span>
+              <button class="secondary-button" onclick={copyPath} disabled={!notesPath}>
+                {copied ? 'Copied' : 'Copy path'}
+              </button>
+            </div>
+          {/if}
         </fieldset>
       </div>
 
@@ -341,5 +354,33 @@
     .modal-backdrop { padding: 10px; }
     label:not(.checkbox-row) { align-items: stretch; flex-direction: column; gap: 8px; }
     select, input[type='range'] { width: 100%; }
+  }
+
+  :global(.mobile) .modal-backdrop {
+    place-items: end stretch;
+    padding: 0;
+  }
+
+  :global(.mobile) .settings-dialog {
+    width: 100%;
+    max-height: calc(100dvh - env(safe-area-inset-top) - 12px);
+    border-right: 0;
+    border-bottom: 0;
+    border-left: 0;
+    border-radius: 20px 20px 0 0;
+  }
+
+  :global(.mobile) .settings-dialog footer {
+    padding-bottom: max(18px, env(safe-area-inset-bottom));
+  }
+
+  :global(.mobile) .icon-button {
+    width: 44px;
+    height: 44px;
+  }
+
+  :global(.mobile) .secondary-button,
+  :global(.mobile) .primary-button {
+    min-height: 44px;
   }
 </style>

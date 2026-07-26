@@ -4,17 +4,18 @@ This document describes the current application. Files under `docs/plans/` are h
 
 ## Product model
 
-Gravity is a local-first desktop notes application:
+Gravity is a local-first notes application. The released experience is desktop-first, and the shared runtime now supports an iOS single-window mode:
 
 - Notes are plain Markdown files with no database or account.
 - `Ctrl+Alt+N` (`Cmd+Option+N` on macOS) opens quick capture.
 - The main window provides a notes list, card view, full-text search, editing, export, settings, and help.
 - Individual notes can open in separate windows.
 - Closing the main window hides it to the system tray; choosing **Quit** exits the application after pending saves receive a short flush window.
+- On iOS, desktop window, tray, shortcut, and self-update behavior is removed. Navigation switches between a full-screen notes list and editor.
 
 ## Runtime architecture
 
-The application is a Tauri 2 desktop binary with a Svelte 5 frontend.
+The application is a Tauri 2 binary with a Svelte 5 frontend. Tauri's `desktop` and `mobile` compile-time configurations keep unsupported integrations out of mobile builds.
 
 ### Frontend
 
@@ -23,8 +24,11 @@ The application is a Tauri 2 desktop binary with a Svelte 5 frontend.
 - `MainWindow.svelte` — browsing, search, editing, cards, settings, onboarding, updates, and export.
 - `CaptureWindow.svelte` — minimal global-hotkey capture.
 - `NoteWindow.svelte` — independent note editing and export handoff.
+- `MobileHeader.svelte` — safe-area-aware iPhone navigation and touch targets.
 
 CodeMirror provides Markdown editing and a deliberately limited set of fenced-code languages. PDF generation and its renderer are dynamically loaded only when needed.
+
+`platform.ts` reads compile-time runtime information from Rust. The document receives a `mobile` class before the application window is mounted, which enables safe areas, touch sizing, and mobile lifecycle-specific behavior.
 
 ### Rust backend
 
@@ -34,7 +38,10 @@ The Tauri command layer is split by responsibility:
 - `commands.rs` — note CRUD, cleanup, full-text search, and image import/storage.
 - `export.rs` — Markdown, text, and PDF file export plus reveal-in-folder.
 - `clipper.rs` — Windows clipboard HTML-to-Markdown conversion.
+- `platform.rs` — target and mobile runtime information exposed to the frontend.
 - `lib.rs` — application setup, shortcuts, windows, tray behavior, plugins, and command registration.
+
+The updater, process relauncher, global shortcuts, clipboard conversion, tray, secondary-window creation, and close-to-tray lifecycle compile only for desktop targets. iOS initializes the native dialog and filesystem plugins for scoped Files export.
 
 ## Storage
 
@@ -45,6 +52,7 @@ Notes live under the platform app-data directory:
 | Windows | `%APPDATA%\com.gravity.app\notes\` |
 | macOS | `~/Library/Application Support/com.gravity.app/notes/` |
 | Linux | `~/.local/share/com.gravity.app/notes/` |
+| iOS | Private Application Support container managed by iOS |
 
 Images are stored in the sibling `images/` directory. Settings use Tauri Store in `settings.json`.
 
@@ -73,7 +81,9 @@ Search is backend-powered and case-insensitive across complete note contents. Re
 
 ## Export
 
-Markdown and plain-text exports are written by the Rust backend. PDF files are rendered in the frontend with jsPDF and offline DejaVu fonts, then atomically written by Rust.
+On desktop, Markdown and plain-text exports are written by the Rust backend. PDF files are rendered in the frontend with jsPDF and offline DejaVu fonts, then atomically written by Rust.
+
+On iOS, the native document save picker grants access to a user-selected Files destination. The filesystem plugin writes Markdown, text, or generated PDF bytes through the resulting security-scoped file URL. Reveal-in-folder remains desktop-only.
 
 PDF rendering supports Unicode, wrapped prose and code, page breaks inside long code blocks, tables, and unclosed code fences. Export filenames reject path separators, control characters, and Windows-reserved filename characters.
 
@@ -88,7 +98,7 @@ PDF rendering supports Unicode, wrapped prose and code, page breaks inside long 
 
 ## Updates and releases
 
-The app checks the configured GitHub `latest.json` endpoint. Available updates are shown to the user and are downloaded and installed only after confirmation, followed by an application relaunch.
+Desktop builds check the configured GitHub `latest.json` endpoint. Available updates are shown to the user and are downloaded and installed only after confirmation, followed by an application relaunch. iOS builds do not include or expose this updater; iOS updates are distributed through the App Store.
 
 GitHub Actions builds macOS ARM64/x64, Linux, and Windows artifacts. Tauri updater signatures are separate from Windows Authenticode signing. Windows installers are signed during bundling through Azure Artifact Signing so later signing does not invalidate updater artifacts.
 
@@ -97,8 +107,11 @@ See `docs/RELEASING.md` for the operational procedure.
 ## Current constraints
 
 - Notes are local to one device; Gravity does not provide sync or collaboration.
+- The iOS shared code and configuration are present, but Xcode generation, signing, physical-device testing, TestFlight, and App Store submission require macOS and Apple credentials.
 - Notes and shortcut locations are fixed; settings currently cover theme, editor typography, onboarding, and default notes-list visibility.
 - Clipboard HTML conversion is Windows-only.
 - Full-text search is intentionally simple and may need indexing for very large note collections.
 - The existing application identifier `com.gravity.app` is retained for installation and data-path compatibility, despite Tauri's macOS naming recommendation.
 - CodeMirror remains the largest initial shared frontend dependency; optional PDF and language code is split into separate chunks.
+
+See `docs/IOS.md` for the native iOS workflow and `docs/SYNC.md` for the proposed cross-device architecture.

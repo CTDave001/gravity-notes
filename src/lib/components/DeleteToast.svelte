@@ -93,6 +93,16 @@
     animation: slideIn 0.2s ease-out;
   }
 
+  :global(.mobile) .toast {
+    right: 12px;
+    bottom: max(12px, env(safe-area-inset-bottom));
+    left: 12px;
+  }
+
+  :global(.mobile) .toast-content {
+    justify-content: space-between;
+  }
+
   @keyframes slideIn {
     from {
       opacity: 0;

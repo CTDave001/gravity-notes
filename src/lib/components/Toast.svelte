@@ -5,11 +5,13 @@
     show = false,
     message = '',
     filePath = '',
+    canReveal = true,
     onclose,
   }: {
     show?: boolean;
     message?: string;
     filePath?: string;
+    canReveal?: boolean;
     onclose?: () => void;
   } = $props();
 
@@ -31,9 +33,11 @@
         <span>{message}</span>
       </div>
       <div class="toast-actions">
-        <button class="toast-btn open" onclick={openLocation}>
-          Open Location
-        </button>
+        {#if canReveal}
+          <button class="toast-btn open" onclick={openLocation}>
+            Open Location
+          </button>
+        {/if}
         <button class="toast-btn close" onclick={onclose} aria-label="Close">
           <svg viewBox="0 0 20 20" fill="currentColor">
             <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
@@ -51,6 +55,16 @@
     right: 20px;
     z-index: 100;
     animation: slideIn 0.2s ease-out;
+  }
+
+  :global(.mobile) .toast {
+    right: 12px;
+    bottom: max(12px, env(safe-area-inset-bottom));
+    left: 12px;
+  }
+
+  :global(.mobile) .toast-content {
+    justify-content: space-between;
   }
 
   @keyframes slideIn {

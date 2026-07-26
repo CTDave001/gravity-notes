@@ -1,5 +1,6 @@
 use crate::storage::atomic_write;
 use std::path::{Component, Path, PathBuf};
+#[cfg(desktop)]
 use std::process::Command;
 
 fn validate_filename(filename: &str) -> Result<&str, String> {
@@ -104,6 +105,7 @@ pub async fn export_pdf(
 }
 
 #[tauri::command]
+#[cfg(desktop)]
 pub async fn get_downloads_dir() -> Result<String, String> {
     dirs::download_dir()
         .map(|p| p.to_string_lossy().to_string())
@@ -111,8 +113,22 @@ pub async fn get_downloads_dir() -> Result<String, String> {
 }
 
 #[tauri::command]
+#[cfg(mobile)]
+pub async fn get_downloads_dir() -> Result<String, String> {
+    Err("The Downloads directory is only available on desktop".to_string())
+}
+
+#[tauri::command]
 pub async fn reveal_in_folder(path: String) -> Result<(), String> {
+    #[cfg(mobile)]
+    {
+        let _ = path;
+        return Err("Reveal in folder is only available on desktop".to_string());
+    }
+
+    #[cfg(desktop)]
     let path = PathBuf::from(&path);
+    #[cfg(desktop)]
     if !path.is_file() {
         return Err("Cannot reveal a file that does not exist".to_string());
     }
@@ -141,6 +157,7 @@ pub async fn reveal_in_folder(path: String) -> Result<(), String> {
             .map_err(|e| e.to_string())?;
     }
 
+    #[cfg(desktop)]
     Ok(())
 }
 

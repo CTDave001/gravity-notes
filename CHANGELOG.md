@@ -4,6 +4,22 @@ All notable changes to Gravity are documented here. The project follows semantic
 
 ## Unreleased
 
+### Added
+
+- An iPhone list/editor navigation shell with safe-area handling and touch-sized primary controls.
+- Native iOS Files export for Markdown, text, and PDF.
+- Separate mobile capabilities, iOS configuration, Info.plist additions, and privacy manifest preparation.
+- macOS-only scripts for generating, running, and producing an App Store Connect iOS build.
+- A manual hosted-macOS GitHub Actions workflow for signed IPA artifacts and TestFlight uploads.
+- iOS release guidance and a provider-neutral, end-to-end encrypted cross-device sync design.
+
+### Changed
+
+- Split desktop-only updater, process relaunch, global shortcut, tray, clipboard, secondary-window, and close-to-tray behavior from the mobile runtime.
+- Made the iOS frontend build remove the GitHub updater and relaunch code entirely.
+- Adapted onboarding, settings, exports, status UI, and delete/export toasts for mobile.
+- Moved the macOS private API flag into macOS-only configuration.
+
 ## 1.1.0 - 2026-07-25
 
 ### Added

@@ -1,8 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy, tick } from 'svelte';
   import { listen, type UnlistenFn } from '@tauri-apps/api/event';
-  import { check, type Update } from '@tauri-apps/plugin-updater';
-  import { relaunch } from '@tauri-apps/plugin-process';
+  import type { Update } from '@tauri-apps/plugin-updater';
   import Editor from '../components/Editor.svelte';
   import StatusBar from '../components/StatusBar.svelte';
   import NoteList from '../components/NoteList.svelte';
@@ -16,8 +15,10 @@
   import SettingsModal from '../components/SettingsModal.svelte';
   import WelcomeModal from '../components/WelcomeModal.svelte';
   import UpdateToast from '../components/UpdateToast.svelte';
+  import MobileHeader from '../components/MobileHeader.svelte';
   import { DebouncedTaskQueue } from '../autosave';
   import { listNotes, searchNotes, getNote, saveNote, createNote, deleteNote } from '../api';
+  import { getRuntimeInfo, isIosBuild } from '../platform';
   import { get } from 'svelte/store';
   import { saveSettings, settings, type Settings } from '../stores/settings';
   import type { NoteMeta, EditorStats, SaveStatus } from '../types';
@@ -43,6 +44,7 @@
   let showUpdateToast = $state(false);
   let updateInstalling = $state(false);
   let updateError = $state('');
+  let isMobile = $state(document.documentElement.classList.contains('mobile'));
 
   // Toast state
   let showToast: boolean = $state(false);
@@ -157,7 +159,10 @@
   }
 
   async function checkForUpdate() {
+    if (isIosBuild || isMobile) return;
+
     try {
+      const { check } = await import('@tauri-apps/plugin-updater');
       pendingUpdate = await check({ timeout: 30_000 });
       if (pendingUpdate) {
         showUpdateToast = true;
@@ -168,11 +173,12 @@
   }
 
   async function installUpdate() {
-    if (!pendingUpdate) return;
+    if (isIosBuild || !pendingUpdate) return;
     updateInstalling = true;
     updateError = '';
     try {
       await pendingUpdate.downloadAndInstall();
+      const { relaunch } = await import('@tauri-apps/plugin-process');
       await relaunch();
     } catch (err) {
       updateError = err instanceof Error ? err.message : 'Could not install the update.';
@@ -222,6 +228,9 @@
         editor.setContent(content);
       }
 
+      if (isMobile) {
+        sidebarVisible = false;
+      }
       startPolling();
     } catch (err) {
       console.error('Failed to load note:', err);
@@ -322,6 +331,9 @@
         editor.setContent('');
         editor.focus();
       }
+      if (isMobile) {
+        sidebarVisible = false;
+      }
       startPolling();
     } catch (err) {
       console.error('Failed to create note:', err);
@@ -350,6 +362,9 @@
         saveStatus = 'saved';
         isEditing = false;
         await loadNotes();
+        if (isMobile) {
+          sidebarVisible = true;
+        }
 
         // Show delete toast with undo option
         showDeleteToast = true;
@@ -385,6 +400,8 @@
   }
 
   function toggleViewMode() {
+    if (isMobile) return;
+
     isAnimating = true;
     viewMode = viewMode === 'list' ? 'grid' : 'list';
 
@@ -395,7 +412,9 @@
   }
 
   function handleSettingsSaved(value: Settings) {
-    sidebarVisible = value.sidebarDefaultOpen;
+    if (!isMobile) {
+      sidebarVisible = value.sidebarDefaultOpen;
+    }
   }
 
   async function completeOnboarding() {
@@ -414,9 +433,18 @@
   }
 
   onMount(async () => {
-    loadNotes();
+    const runtime = await getRuntimeInfo();
+    isMobile = runtime.mobile;
+    if (isMobile) {
+      viewMode = 'list';
+      sidebarVisible = true;
+    }
 
-    void checkForUpdate();
+    await loadNotes();
+
+    if (!isIosBuild && !isMobile) {
+      void checkForUpdate();
+    }
 
     // Listen for export requests from popup windows
     unlistenExport = await listen<{ id: string; title: string; content: string }>('export-note', async (event) => {
@@ -464,17 +492,27 @@
 
 <svelte:window onkeydown={handleGlobalKeydown} />
 
-<div class="main-window">
+<div class="main-window" class:mobile={isMobile}>
   <!-- Title Bar -->
-  <TitleBar
-    {viewMode}
-    {sidebarVisible}
-    onhelp={() => showHelpModal = true}
-    onsettings={() => showSettingsModal = true}
-    onsidebar={() => sidebarVisible = !sidebarVisible}
-    ontoggleview={toggleViewMode}
-    onnewnote={handleNewNote}
-  />
+  {#if isMobile}
+    <MobileHeader
+      title={selectedNote?.title || 'Untitled'}
+      showingList={sidebarVisible}
+      onnotes={() => sidebarVisible = true}
+      onsettings={() => showSettingsModal = true}
+      onnewnote={handleNewNote}
+    />
+  {:else}
+    <TitleBar
+      {viewMode}
+      {sidebarVisible}
+      onhelp={() => showHelpModal = true}
+      onsettings={() => showSettingsModal = true}
+      onsidebar={() => sidebarVisible = !sidebarVisible}
+      ontoggleview={toggleViewMode}
+      onnewnote={handleNewNote}
+    />
+  {/if}
 
   <div class="main-content" class:card-mode={viewMode === 'grid'}>
     {#if viewMode === 'grid'}
@@ -513,6 +551,7 @@
             notes={filteredNotes}
             selectedId={selectedNote?.id ?? null}
             viewMode="list"
+            allowPopout={!isMobile}
             onselect={handleSelectNote}
           />
         </div>
@@ -570,7 +609,9 @@
                 </svg>
                 New note
               </button>
-              <p class="shortcut-hint">Tip: use Ctrl+Alt+N for quick capture from anywhere.</p>
+              <p class="shortcut-hint">
+                {isMobile ? 'Tap + to capture your first thought.' : 'Tip: use Ctrl+Alt+N for quick capture from anywhere.'}
+              </p>
             </div>
           </div>
         {/if}
@@ -584,6 +625,7 @@
   show={showExportModal}
   noteTitle={exportNoteTitle || selectedNote?.title || 'Untitled'}
   noteContent={exportNoteContent || content}
+  mobile={isMobile}
   onclose={() => {
     showExportModal = false;
     // Clear external export data
@@ -596,8 +638,9 @@
 <!-- Toast notification -->
 <Toast
   show={showToast}
-  message="File saved to Downloads"
+  message={isMobile ? 'File exported' : 'File saved to Downloads'}
   filePath={toastFilePath}
+  canReveal={!isMobile}
   onclose={() => showToast = false}
 />
 
@@ -617,26 +660,30 @@
 
 <SettingsModal
   show={showSettingsModal}
+  mobile={isMobile}
   onclose={() => showSettingsModal = false}
   onsave={handleSettingsSaved}
 />
 
-<WelcomeModal show={showWelcomeModal} oncomplete={completeOnboarding} />
+<WelcomeModal show={showWelcomeModal} mobile={isMobile} oncomplete={completeOnboarding} />
 
-<UpdateToast
-  show={showUpdateToast}
-  version={pendingUpdate?.version ?? ''}
-  installing={updateInstalling}
-  error={updateError}
-  oninstall={installUpdate}
-  ondismiss={() => showUpdateToast = false}
-/>
+{#if !isIosBuild && !isMobile}
+  <UpdateToast
+    show={showUpdateToast}
+    version={pendingUpdate?.version ?? ''}
+    installing={updateInstalling}
+    error={updateError}
+    oninstall={installUpdate}
+    ondismiss={() => showUpdateToast = false}
+  />
+{/if}
 
 <style>
   .main-window {
     display: flex;
     flex-direction: column;
     height: 100vh;
+    height: 100dvh;
     background: var(--bg-primary);
     overflow: hidden;
   }
@@ -886,6 +933,60 @@
     .editor-pane.sidebar-visible {
       margin-left: 0;
     }
+  }
+
+  .main-window.mobile .main-content {
+    min-height: 0;
+  }
+
+  .main-window.mobile .sidebar {
+    width: 100%;
+    border-right: 0;
+    box-shadow: none;
+    z-index: 15;
+  }
+
+  .main-window.mobile .sidebar-header {
+    padding: 14px 16px 12px;
+  }
+
+  .main-window.mobile .pin-btn {
+    display: none;
+  }
+
+  .main-window.mobile .note-list-container {
+    padding-bottom: max(16px, env(safe-area-inset-bottom));
+  }
+
+  .main-window.mobile .editor-pane,
+  .main-window.mobile .editor-pane.sidebar-visible {
+    margin-left: 0;
+    min-width: 0;
+  }
+
+  .main-window.mobile .editor-pane.sidebar-visible {
+    visibility: hidden;
+    pointer-events: none;
+  }
+
+  .main-window.mobile .editor-toolbar {
+    min-height: 48px;
+    padding: 2px 10px;
+  }
+
+  .main-window.mobile .toolbar-btn {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+  }
+
+  .main-window.mobile .toolbar-btn .icon {
+    width: 20px;
+    height: 20px;
+  }
+
+  .main-window.mobile .empty-content {
+    padding: 24px;
   }
 
   </style>

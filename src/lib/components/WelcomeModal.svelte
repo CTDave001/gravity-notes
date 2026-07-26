@@ -4,9 +4,11 @@
 
   let {
     show = false,
+    mobile = false,
     oncomplete,
   }: {
     show?: boolean;
+    mobile?: boolean;
     oncomplete?: () => void;
   } = $props();
 
@@ -29,14 +31,28 @@
       <div class="mark" aria-hidden="true">G</div>
       <p class="eyebrow">Welcome to Gravity</p>
       <h1 id="welcome-title">Capture first. Organize later.</h1>
-      <p class="intro">Your notes are plain Markdown files stored locally, with quick capture available from anywhere.</p>
+      <p class="intro">
+        {mobile
+          ? 'A calm, local-first place for notes on your iPhone.'
+          : 'Your notes are plain Markdown files stored locally, with quick capture available from anywhere.'}
+      </p>
       <div class="steps">
-        <div><kbd>{isMac ? '⌘' : 'Ctrl'}</kbd><span>+</span><kbd>{isMac ? '⌥' : 'Alt'}</kbd><span>+</span><kbd>N</kbd><p>Open quick capture</p></div>
-        <div><kbd>{isMac ? '⌘' : 'Ctrl'}</kbd><span>+</span><kbd>{isMac ? '⌥' : 'Alt'}</kbd><span>+</span><kbd>G</kbd><p>Bring Gravity forward</p></div>
-        <div><kbd>F1</kbd><p>See Markdown and editor shortcuts</p></div>
+        {#if mobile}
+          <div><span class="touch-symbol">＋</span><p>Tap + whenever you want a fresh note</p></div>
+          <div><span class="touch-symbol">☁︎</span><p>Notes stay on this device until sync is enabled</p></div>
+          <div><span class="touch-symbol">↗</span><p>Export Markdown, text, or PDF through Files</p></div>
+        {:else}
+          <div><kbd>{isMac ? '⌘' : 'Ctrl'}</kbd><span>+</span><kbd>{isMac ? '⌥' : 'Alt'}</kbd><span>+</span><kbd>N</kbd><p>Open quick capture</p></div>
+          <div><kbd>{isMac ? '⌘' : 'Ctrl'}</kbd><span>+</span><kbd>{isMac ? '⌥' : 'Alt'}</kbd><span>+</span><kbd>G</kbd><p>Bring Gravity forward</p></div>
+          <div><kbd>F1</kbd><p>See Markdown and editor shortcuts</p></div>
+        {/if}
       </div>
       <button bind:this={startButton} onclick={oncomplete}>Start writing</button>
-      <small>Gravity lives in the system tray when its windows are closed.</small>
+      <small>
+        {mobile
+          ? 'Your notes remain local and available offline.'
+          : 'Gravity lives in the system tray when its windows are closed.'}
+      </small>
     </div>
   </div>
 {/if}
@@ -138,6 +154,18 @@
     border-radius: 5px;
     box-shadow: 0 1px 0 var(--border-color);
     font: 11px var(--editor-font-family);
+  }
+
+  .touch-symbol {
+    display: grid;
+    place-items: center;
+    width: 30px;
+    height: 30px;
+    color: var(--accent);
+    background: var(--accent-muted);
+    border-radius: 9px;
+    font-size: 17px;
+    font-weight: 700;
   }
 
   button {
