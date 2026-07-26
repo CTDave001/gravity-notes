@@ -48,7 +48,7 @@
       '--editor-font-family',
       value.editorFontFamily === 'mono'
         ? "'JetBrains Mono', 'Cascadia Code', 'Consolas', monospace"
-        : "'Inter', system-ui, -apple-system, sans-serif",
+        : "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
     );
   }
 

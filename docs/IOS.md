@@ -11,6 +11,8 @@ Gravity's shared Rust and Svelte code is prepared for an iOS target. This docume
 - Desktop and iOS capabilities are separate.
 - GitHub self-updates are disabled in the iOS configuration.
 - `Info.ios.plist` and `PrivacyInfo.xcprivacy` sources are committed.
+- Branded app-icon assets are committed and copied over Tauri's generated
+  placeholder icon catalog during iOS preparation.
 
 ## Prerequisites
 
@@ -96,7 +98,10 @@ npm run ios:init
 npm run ios:dev
 ```
 
-`ios:init` runs Tauri's project generator and copies `PrivacyInfo.xcprivacy` into `src-tauri/gen/apple/`. The generated Apple project is machine/team-specific and is not committed.
+`ios:init` runs Tauri's project generator, copies `PrivacyInfo.xcprivacy`, and
+replaces the generated Tauri app icons with Gravity's branded icon set in
+`src-tauri/gen/apple/`. The generated Apple project is machine/team-specific and
+is not committed.
 
 Open the generated project through Tauri when native signing or Xcode settings need attention:
 

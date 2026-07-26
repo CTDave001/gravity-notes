@@ -419,8 +419,14 @@
 
   async function completeOnboarding() {
     const current = get(settings);
-    await saveSettings({ ...current, onboardingComplete: true });
     showWelcomeModal = false;
+    void saveSettings({ ...current, onboardingComplete: true }).catch((error) => {
+      console.error('Failed to save onboarding status:', error);
+    });
+
+    if (!selectedNote && notes.length === 0) {
+      await handleNewNote();
+    }
   }
 
   async function openExportModal() {
