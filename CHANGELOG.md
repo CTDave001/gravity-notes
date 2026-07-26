@@ -4,6 +4,8 @@ All notable changes to Gravity are documented here. The project follows semantic
 
 ## Unreleased
 
+## 1.1.0 - 2026-07-25
+
 ### Added
 
 - Persistent theme, editor font, font-size, line-spacing, notes-list, and onboarding settings.
