@@ -21,10 +21,18 @@ export async function listNotes(): Promise<NoteMeta[]> {
   return invoke('list_notes');
 }
 
+export async function searchNotes(query: string): Promise<NoteMeta[]> {
+  return invoke('search_notes', { query });
+}
+
 export async function deleteIfEmpty(id: string): Promise<boolean> {
   return invoke('delete_if_empty', { id });
 }
 
 export async function cleanupEmptyNotes(maxAgeMinutes: number = 15): Promise<number> {
   return invoke('cleanup_empty_notes', { maxAgeMinutes });
+}
+
+export async function getNotesPath(): Promise<string> {
+  return invoke('get_notes_path');
 }

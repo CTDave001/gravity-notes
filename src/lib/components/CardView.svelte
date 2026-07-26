@@ -113,7 +113,10 @@
             class:selected={selectedId === note.id}
             onmouseenter={() => hoveredId = note.id}
             onmouseleave={() => hoveredId = null}
+            onfocus={() => hoveredId = note.id}
+            onblur={() => hoveredId = null}
             onclick={() => handleSelect(note)}
+            aria-pressed={selectedId === note.id}
           >
             <div class="card-header">
               <span class="card-title">{@html highlightText(note.title || 'Untitled', searchQuery)}</span>

@@ -1,14 +1,21 @@
 <script lang="ts">
+  import { onDestroy } from 'svelte';
   import { getCurrentWindow } from '@tauri-apps/api/window';
 
   let {
     viewMode = 'list',
+    sidebarVisible = true,
     onhelp,
+    onsettings,
+    onsidebar,
     ontoggleview,
     onnewnote,
   }: {
     viewMode?: 'list' | 'grid';
+    sidebarVisible?: boolean;
     onhelp?: () => void;
+    onsettings?: () => void;
+    onsidebar?: () => void;
     ontoggleview?: () => void;
     onnewnote?: () => void;
   } = $props();
@@ -23,8 +30,12 @@
   checkMaximized();
 
   // Listen for window resize to update maximized state
-  currentWindow.onResized(async () => {
+  const resizeListener = currentWindow.onResized(async () => {
     isMaximized = await currentWindow.isMaximized();
+  });
+
+  onDestroy(() => {
+    void resizeListener.then((unlisten) => unlisten());
   });
 
   function startDrag(e: MouseEvent) {
@@ -63,11 +74,26 @@
     <span class="app-name">Gravity</span>
 
     <div class="title-bar-actions">
+      <button
+        class="action-btn"
+        class:active={sidebarVisible && viewMode === 'list'}
+        onclick={onsidebar}
+        title={sidebarVisible ? 'Hide notes list' : 'Show notes list'}
+        aria-label={sidebarVisible ? 'Hide notes list' : 'Show notes list'}
+        aria-pressed={sidebarVisible}
+      >
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <rect x="3.5" y="4" width="17" height="16" rx="2"/>
+          <path d="M9 4v16"/>
+        </svg>
+      </button>
+
       <!-- Help button -->
       <button
         class="action-btn"
         onclick={onhelp}
         title="Help (F1)"
+        aria-label="Help"
       >
         <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
           <path stroke-linecap="round" stroke-linejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9 5.25h.008v.008H12v-.008z" />
@@ -79,6 +105,7 @@
         class="action-btn"
         onclick={ontoggleview}
         title={viewMode === 'list' ? 'Grid view' : 'List view'}
+        aria-label={viewMode === 'list' ? 'Switch to grid view' : 'Switch to list view'}
       >
         {#if viewMode === 'list'}
           <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -91,11 +118,24 @@
         {/if}
       </button>
 
+      <button
+        class="action-btn"
+        onclick={onsettings}
+        title="Settings"
+        aria-label="Settings"
+      >
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.592c.55 0 1.02.398 1.11.94l.214 1.286c.063.377.318.69.66.858.077.038.153.077.228.118.337.183.738.24 1.094.1l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.245c.275.476.162 1.08-.273 1.419l-1.028.802c-.3.234-.437.613-.424.994a6.7 6.7 0 010 .408c-.013.381.125.76.424.994l1.028.802c.435.338.548.943.273 1.419l-1.296 2.245a1.125 1.125 0 01-1.37.49l-1.217-.456c-.356-.14-.757-.083-1.094.1a6.86 6.86 0 01-.228.118c-.342.168-.597.481-.66.858l-.214 1.286c-.09.542-.56.94-1.11.94h-2.592c-.55 0-1.02-.398-1.11-.94l-.214-1.286c-.063-.377-.318-.69-.66-.858a6.663 6.663 0 01-.228-.118c-.337-.183-.738-.24-1.094-.1l-1.217.456a1.125 1.125 0 01-1.37-.49l-1.296-2.245a1.125 1.125 0 01.273-1.419l1.028-.802c.3-.234.437-.613.424-.994a6.681 6.681 0 010-.408c.013-.381-.125-.76-.424-.994L3.788 10a1.125 1.125 0 01-.273-1.419l1.296-2.245a1.125 1.125 0 011.37-.49l1.217.456c.356.14.757.083 1.094-.1.075-.041.151-.08.228-.118.342-.168.597-.481.66-.858l.214-1.286z"/>
+          <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+        </svg>
+      </button>
+
       <!-- New note -->
       <button
         class="action-btn accent"
         onclick={onnewnote}
-        title="New note (Ctrl+N)"
+        title="New note"
+        aria-label="New note"
       >
         <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
           <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
@@ -149,8 +189,10 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
+    width: 100%;
     height: 40px;
     padding: 0 12px;
+    box-sizing: border-box;
     background: var(--bg-sidebar);
     user-select: none;
     flex-shrink: 0;
@@ -161,6 +203,7 @@
     display: flex;
     align-items: center;
     gap: 16px;
+    min-width: 0;
   }
 
   .app-name {
@@ -199,6 +242,11 @@
     color: var(--accent);
   }
 
+  .action-btn.active {
+    color: var(--text-primary);
+    background: var(--hover-bg);
+  }
+
   .action-btn .icon {
     width: 16px;
     height: 16px;
@@ -208,7 +256,9 @@
     display: flex;
     align-items: center;
     gap: 2px;
+    margin-left: auto;
     margin-right: -8px;
+    flex-shrink: 0;
   }
 
   .control-btn {

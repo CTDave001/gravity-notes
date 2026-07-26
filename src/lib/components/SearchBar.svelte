@@ -10,6 +10,11 @@
     oninput?: (value: string) => void;
     onclear?: () => void;
   } = $props();
+  let inputElement: HTMLInputElement | undefined = $state();
+
+  export function focus() {
+    inputElement?.focus();
+  }
 
   function handleInput(event: Event) {
     const target = event.target as HTMLInputElement;
@@ -45,6 +50,7 @@
     />
   </svg>
   <input
+    bind:this={inputElement}
     type="text"
     class="search-input"
     {placeholder}

@@ -15,3 +15,15 @@ export interface EditorStats {
   line: number;
   column: number;
 }
+
+export type SaveStatus = 'saved' | 'saving' | 'error';
+
+export type ResizeDirection =
+  | 'East'
+  | 'North'
+  | 'NorthEast'
+  | 'NorthWest'
+  | 'South'
+  | 'SouthEast'
+  | 'SouthWest'
+  | 'West';

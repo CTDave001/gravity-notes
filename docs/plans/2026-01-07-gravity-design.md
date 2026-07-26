@@ -1,5 +1,7 @@
 # Gravity - Design Document
 
+> **Historical document:** This records the original product direction. Some planned capabilities—such as configurable hotkeys and storage, auto-hidden navigation, preview mode, and PDF template customization—were intentionally changed or deferred. See the [current architecture](../ARCHITECTURE.md) for the shipped product and technical design.
+
 > Fast capture app with global hotkeys, auto-save architecture, markdown support, polished minimal UI, and one-click PDF export. Part of the Gravity → Orbit → Momentum ecosystem.
 
 ## Ecosystem

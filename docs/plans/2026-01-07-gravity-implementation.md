@@ -1,6 +1,8 @@
 # Gravity Implementation Plan
 
-> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
+> **Historical document:** This was the original implementation plan. It is retained for project history and does not describe the current dependencies, permissions, architecture details, or release process. Use the root [README](../../README.md), [current architecture](../ARCHITECTURE.md), and source configuration as the current reference.
+
+> **Original execution note:** The task-by-task instructions below are preserved only as historical context.
 
 **Goal:** Build a fast note capture app with global hotkeys, auto-save, markdown support, and PDF export.
 

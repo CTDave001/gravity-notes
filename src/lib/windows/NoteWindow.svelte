@@ -2,11 +2,12 @@
   import { onMount, onDestroy } from 'svelte';
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
-  import { emit } from '@tauri-apps/api/event';
+  import { emit, listen } from '@tauri-apps/api/event';
   import Editor from '../components/Editor.svelte';
   import StatusBar from '../components/StatusBar.svelte';
   import { getNote, saveNote } from '../api';
-  import type { EditorStats } from '../types';
+  import { DebouncedTaskQueue } from '../autosave';
+  import type { EditorStats, ResizeDirection, SaveStatus } from '../types';
 
   let currentWindow = getCurrentWindow();
 
@@ -16,10 +17,9 @@
     }
   }
 
-  async function startResize(e: MouseEvent, direction: string) {
+  async function startResize(e: MouseEvent, direction: ResizeDirection) {
     e.preventDefault();
     e.stopPropagation();
-    // @ts-ignore
     await currentWindow.startResizeDragging(direction);
   }
 
@@ -39,21 +39,22 @@
   let noteTitle: string = $state('Untitled');
   let content: string = $state('');
   let stats: EditorStats = $state({ wordCount: 0, charCount: 0, line: 1, column: 1 });
-  let saved: boolean = $state(true);
+  let saveStatus: SaveStatus = $state('saved');
   let loading: boolean = $state(true);
   let error: string | null = $state(null);
 
   let editor: Editor | undefined = $state();
-  let saveTimeout: ReturnType<typeof setTimeout> | null = null;
   let pollInterval: ReturnType<typeof setInterval> | null = null;
   let isEditing: boolean = false;
   let editingTimeout: ReturnType<typeof setTimeout> | null = null;
   let unlisten: (() => void) | null = null;
+  let unlistenQuit: (() => void) | null = null;
   let lastSavedContent: string = '';
   let updatingFromExternal: boolean = false;
 
   const SAVE_DELAY = 200;
   const POLL_INTERVAL = 1500;
+  const saver = new DebouncedTaskQueue(SAVE_DELAY);
 
   function getNoteIdFromUrl(): string | null {
     const params = new URLSearchParams(window.location.search);
@@ -84,7 +85,7 @@
         line: 1,
         column: 1,
       };
-      saved = true;
+      saveStatus = 'saved';
 
       if (editor) {
         updatingFromExternal = true;
@@ -101,7 +102,7 @@
   }
 
   async function checkForExternalChanges() {
-    if (!noteId || isEditing || !saved) return;
+    if (!noteId || isEditing || saveStatus !== 'saved') return;
 
     try {
       const currentContent = await getNote(noteId);
@@ -138,7 +139,7 @@
 
     content = data.content;
     stats = data.stats;
-    saved = false;
+    saveStatus = 'saving';
     isEditing = true;
 
     noteTitle = extractTitle(content);
@@ -149,31 +150,44 @@
       isEditing = false;
     }, 2000);
 
-    if (saveTimeout) clearTimeout(saveTimeout);
-    saveTimeout = setTimeout(async () => {
-      if (noteId) {
-        try {
-          await saveNote(noteId, content);
-          lastSavedContent = content;
-          saved = true;
-          // Notify other windows about the update
-          await emit('notes-changed');
-        } catch (err) {
-          console.error('Failed to save note:', err);
-        }
-      }
-    }, SAVE_DELAY);
+    if (noteId) {
+      const id = noteId;
+      const snapshot = content;
+      saver.schedule(() => persistSnapshot(id, snapshot));
+    }
   }
 
   function handleCursorChange(data: { line: number; column: number }) {
     stats = { ...stats, line: data.line, column: data.column };
   }
 
-  async function handleClose() {
-    if (saveTimeout) clearTimeout(saveTimeout);
-    if (noteId && content && !saved) {
-      await saveNote(noteId, content);
+  async function persistSnapshot(id: string, snapshot: string) {
+    try {
+      await saveNote(id, snapshot);
+      lastSavedContent = snapshot;
+      if (noteId === id && content === snapshot) {
+        saveStatus = 'saved';
+      }
+      await emit('notes-changed');
+    } catch (err) {
+      if (noteId === id) {
+        saveStatus = 'error';
+      }
+      console.error('Failed to save note:', err);
+      throw err;
     }
+  }
+
+  async function flushPendingSave() {
+    if (!noteId || (content === lastSavedContent && saveStatus === 'saved')) return;
+    saveStatus = 'saving';
+    const id = noteId;
+    const snapshot = content;
+    await saver.flush(() => persistSnapshot(id, snapshot));
+  }
+
+  async function handleClose() {
+    await flushPendingSave();
   }
 
   async function closeWindow() {
@@ -188,11 +202,7 @@
   async function handleExport() {
     if (!noteId) return;
 
-    // Save any pending changes first
-    if (saveTimeout) clearTimeout(saveTimeout);
-    if (!saved && content) {
-      await saveNote(noteId, content);
-    }
+    await flushPendingSave();
 
     // Emit event to main window with note info
     await emit('export-note', {
@@ -230,14 +240,18 @@
       await handleClose();
       await currentWindow.destroy();
     });
+    unlistenQuit = await listen('prepare-to-quit', () => {
+      void flushPendingSave();
+    });
   });
 
   onDestroy(() => {
     window.removeEventListener('keydown', handleKeydown);
-    if (saveTimeout) clearTimeout(saveTimeout);
+    saver.dispose();
     if (pollInterval) clearInterval(pollInterval);
     if (editingTimeout) clearTimeout(editingTimeout);
     if (unlisten) unlisten();
+    unlistenQuit?.();
   });
 </script>
 
@@ -297,7 +311,7 @@
       <div class="editor-area">
         <Editor bind:this={editor} {content} onchange={handleChange} oncursorchange={handleCursorChange} />
       </div>
-      <StatusBar wordCount={stats.wordCount} charCount={stats.charCount} line={stats.line} column={stats.column} {saved} />
+      <StatusBar wordCount={stats.wordCount} charCount={stats.charCount} line={stats.line} column={stats.column} status={saveStatus} onretry={() => void flushPendingSave()} />
     {/if}
   </div>
 </div>

@@ -4,33 +4,63 @@ import { Store } from '@tauri-apps/plugin-store';
 export interface Settings {
   theme: 'system' | 'light' | 'dark';
   editorFontSize: number;
-  newNoteShortcut: string;
-  mainWindowShortcut: string;
+  editorFontFamily: 'sans' | 'mono';
+  editorLineHeight: number;
+  sidebarDefaultOpen: boolean;
+  onboardingComplete: boolean;
 }
 
 const defaultSettings: Settings = {
   theme: 'system',
-  editorFontSize: 15,
-  newNoteShortcut: 'Ctrl+Alt+N',
-  mainWindowShortcut: 'Ctrl+Alt+G',
+  editorFontSize: 14,
+  editorFontFamily: 'sans',
+  editorLineHeight: 1.65,
+  sidebarDefaultOpen: true,
+  onboardingComplete: false,
 };
 
 export const settings = writable<Settings>(defaultSettings);
 
 let store: Store | null = null;
 
-export async function loadSettings() {
-  store = await Store.load('settings.json');
-  const saved = await store.get<Settings>('settings');
-  if (saved) {
-    settings.set({ ...defaultSettings, ...saved });
+function normalizeSettings(saved?: Partial<Settings>): Settings {
+  const theme = saved?.theme;
+  const editorFontFamily = saved?.editorFontFamily;
+  return {
+    theme: theme === 'light' || theme === 'dark' || theme === 'system' ? theme : defaultSettings.theme,
+    editorFontSize: Math.min(22, Math.max(12, Number(saved?.editorFontSize) || defaultSettings.editorFontSize)),
+    editorFontFamily: editorFontFamily === 'mono' || editorFontFamily === 'sans'
+      ? editorFontFamily
+      : defaultSettings.editorFontFamily,
+    editorLineHeight: Math.min(2, Math.max(1.35, Number(saved?.editorLineHeight) || defaultSettings.editorLineHeight)),
+    sidebarDefaultOpen: typeof saved?.sidebarDefaultOpen === 'boolean'
+      ? saved.sidebarDefaultOpen
+      : defaultSettings.sidebarDefaultOpen,
+    onboardingComplete: typeof saved?.onboardingComplete === 'boolean'
+      ? saved.onboardingComplete
+      : defaultSettings.onboardingComplete,
+  };
+}
+
+export async function loadSettings(): Promise<Settings> {
+  try {
+    store = await Store.load('settings.json');
+    const saved = await store.get<Partial<Settings>>('settings');
+    const loaded = normalizeSettings(saved);
+    settings.set(loaded);
+    return loaded;
+  } catch (error) {
+    console.error('Failed to load settings; using defaults:', error);
+    const fallback = { ...defaultSettings };
+    settings.set(fallback);
+    return fallback;
   }
 }
 
-export async function saveSettings(newSettings: Settings) {
-  settings.set(newSettings);
-  if (store) {
-    await store.set('settings', newSettings);
-    await store.save();
-  }
+export async function saveSettings(newSettings: Settings): Promise<void> {
+  const normalized = normalizeSettings(newSettings);
+  settings.set(normalized);
+  store ??= await Store.load('settings.json');
+  await store.set('settings', normalized);
+  await store.save();
 }

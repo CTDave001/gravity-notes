@@ -2,9 +2,6 @@
 
 **Press a key. Write. Close. Your thought is already saved.**
 
-<!-- TODO: Add a 5-second GIF demo here - this is your #1 conversion tool -->
-<!-- Record: Ctrl+Alt+N → type a thought → close window → show it saved -->
-
 Most note apps make you think about notes.
 Gravity lets you **think instead**.
 
@@ -38,6 +35,11 @@ You own them forever.
 - **Dark mode** - Easy on the eyes
 - **Pop-out windows** - Keep notes visible while working
 - **Card view** - Visual overview of all your notes
+- **Full-text search** - Find text anywhere in any note
+- **Image drops** - Paste or drop images directly into notes
+- **Flexible editor** - Choose your theme, font, size, and spacing
+- **PDF export** - Offline Unicode PDF templates, Markdown, or plain text
+- **Signed updates** - Install verified releases from inside the app
 
 ## What Gravity is NOT
 
@@ -58,21 +60,21 @@ You own them forever.
 ```bash
 git clone https://github.com/CTDave001/gravity-notes.git
 cd gravity-notes
-npm install
+npm ci
 npm run tauri build
 ```
 
-Requires [Node.js 18+](https://nodejs.org/) and [Rust](https://rustup.rs/).
+Requires [Node.js 20.19+ or 22.12+](https://nodejs.org/) and [Rust](https://rustup.rs/). Node.js 22 LTS is recommended.
 
 ## Your notes live here
 
 | Platform | Location |
 |----------|----------|
-| Windows | `%APPDATA%\Gravity\notes\` |
-| macOS | `~/Library/Application Support/Gravity/notes/` |
-| Linux | `~/.local/share/Gravity/notes/` |
+| Windows | `%APPDATA%\com.gravity.app\notes\` |
+| macOS | `~/Library/Application Support/com.gravity.app/notes/` |
+| Linux | `~/.local/share/com.gravity.app/notes/` |
 
-Plain markdown. Always accessible. Always yours.
+Plain markdown. Always accessible. Always yours. The exact path is also shown in **Settings → Notes folder**.
 
 ## Keyboard shortcuts
 
@@ -81,12 +83,43 @@ Plain markdown. Always accessible. Always yours.
 | `Ctrl+Alt+N` | Quick capture (global) |
 | `Ctrl+Alt+G` | Focus Gravity |
 | `Ctrl+N` | New note |
+| `Ctrl+F` | Search all note content |
+| `Ctrl+\` | Toggle notes list |
+| `Ctrl+Shift+E` | Export note |
 | `Ctrl+W` / `Esc` | Close window |
 | `Ctrl+B/I/K` | Bold / Italic / Link |
+
+Use `Cmd` and `Option` instead of `Ctrl` and `Alt` on macOS. On Windows, `Ctrl+Alt+V` converts clipboard HTML to Markdown.
 
 ## Built with
 
 [Tauri](https://tauri.app) · [Svelte](https://svelte.dev) · [CodeMirror](https://codemirror.net)
+
+## Development
+
+```bash
+npm ci
+npm run check
+npm test
+npm run tauri dev
+```
+
+On Windows, use the MSVC Rust toolchain. If it is not your default:
+
+```powershell
+$env:RUSTUP_TOOLCHAIN = "stable-x86_64-pc-windows-msvc"
+npm run tauri dev
+```
+
+Current technical documentation:
+
+- [Architecture](docs/ARCHITECTURE.md)
+- [Development and testing](docs/DEVELOPMENT.md)
+- [Release process](docs/RELEASING.md)
+- [Changelog](CHANGELOG.md)
+- [Security policy](SECURITY.md)
+
+Files under [`docs/plans`](docs/plans) are retained as historical design and implementation records; they are not current instructions.
 
 ## License
 

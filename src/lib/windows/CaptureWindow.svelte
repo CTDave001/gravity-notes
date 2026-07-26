@@ -1,11 +1,12 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { getCurrentWindow } from '@tauri-apps/api/window';
-  import { emit } from '@tauri-apps/api/event';
+  import { emit, listen } from '@tauri-apps/api/event';
   import Editor from '../components/Editor.svelte';
   import StatusBar from '../components/StatusBar.svelte';
+  import { DebouncedTaskQueue } from '../autosave';
   import { createNote, saveNote, deleteIfEmpty } from '../api';
-  import type { NoteMeta, EditorStats } from '../types';
+  import type { EditorStats, ResizeDirection, SaveStatus } from '../types';
 
   let currentWindow = getCurrentWindow();
 
@@ -17,10 +18,9 @@
   }
 
   // Resize handlers
-  async function startResize(e: MouseEvent, direction: string) {
+  async function startResize(e: MouseEvent, direction: ResizeDirection) {
     e.preventDefault();
     e.stopPropagation();
-    // @ts-ignore - startResizeDragging is available in Tauri v2
     await currentWindow.startResizeDragging(direction);
   }
 
@@ -41,20 +41,29 @@
   let noteId: string | null = $state(null);
   let content: string = $state('');
   let stats: EditorStats = $state({ wordCount: 0, charCount: 0, line: 1, column: 1 });
-  let saved: boolean = $state(true);
-  let saveTimeout: ReturnType<typeof setTimeout> | null = $state(null);
+  let saveStatus: SaveStatus = $state('saved');
   let editor: Editor | undefined = $state();
   let unlisten: (() => void) | null = null;
+  let unlistenQuit: (() => void) | null = null;
+  let lastSavedContent = '';
 
   const SAVE_DELAY = 200; // ms
+  const saver = new DebouncedTaskQueue(SAVE_DELAY);
 
   async function initNote() {
+    saveStatus = 'saving';
     try {
       const note = await createNote();
       noteId = note.id;
+      if (content !== lastSavedContent) {
+        scheduleSave(note.id, content);
+      } else {
+        saveStatus = 'saved';
+      }
       // Notify other windows about the new note
       await emit('notes-changed');
     } catch (err) {
+      saveStatus = 'error';
       console.error('Failed to create note:', err);
     }
   }
@@ -62,24 +71,58 @@
   function handleChange(data: { content: string; stats: EditorStats }) {
     content = data.content;
     stats = data.stats;
-    saved = false;
+    saveStatus = noteId ? 'saving' : 'error';
 
-    if (saveTimeout) {
-      clearTimeout(saveTimeout);
+    if (noteId) {
+      scheduleSave(noteId, data.content);
     }
+  }
 
-    saveTimeout = setTimeout(async () => {
-      if (noteId) {
-        try {
-          await saveNote(noteId, content);
-          saved = true;
-          // Notify other windows about the update
-          await emit('notes-changed');
-        } catch (err) {
-          console.error('Failed to save note:', err);
-        }
+  function scheduleSave(id: string, snapshot: string) {
+    saver.schedule(() => persistSnapshot(id, snapshot));
+  }
+
+  async function persistSnapshot(id: string, snapshot: string) {
+    try {
+      await saveNote(id, snapshot);
+      if (noteId === id && content === snapshot) {
+        lastSavedContent = snapshot;
+        saveStatus = 'saved';
       }
-    }, SAVE_DELAY);
+      await emit('notes-changed');
+    } catch (err) {
+      if (noteId === id) {
+        saveStatus = 'error';
+      }
+      console.error('Failed to save note:', err);
+      throw err;
+    }
+  }
+
+  async function flushPendingSave() {
+    if (!noteId) {
+      await saver.drain();
+      if (content.trim()) {
+        saveStatus = 'error';
+        throw new Error('The note has not been created yet');
+      }
+      return;
+    }
+    if (content === lastSavedContent && saveStatus === 'saved') {
+      await saver.drain();
+      return;
+    }
+    const id = noteId;
+    const snapshot = content;
+    await saver.flush(() => persistSnapshot(id, snapshot));
+  }
+
+  async function retrySave() {
+    if (!noteId) {
+      await initNote();
+      return;
+    }
+    await flushPendingSave();
   }
 
   function handleCursorChange(data: { line: number; column: number }) {
@@ -87,14 +130,7 @@
   }
 
   async function handleClose() {
-    // Save any pending changes
-    if (saveTimeout) {
-      clearTimeout(saveTimeout);
-    }
-
-    if (noteId && content && !saved) {
-      await saveNote(noteId, content);
-    }
+    await flushPendingSave();
 
     // Delete if empty
     if (noteId) {
@@ -126,16 +162,18 @@
       await handleClose();
       await currentWindow.destroy();
     });
+    unlistenQuit = await listen('prepare-to-quit', () => {
+      void flushPendingSave();
+    });
   });
 
   onDestroy(() => {
     window.removeEventListener('keydown', handleKeydown);
-    if (saveTimeout) {
-      clearTimeout(saveTimeout);
-    }
+    saver.dispose();
     if (unlisten) {
       unlisten();
     }
+    unlistenQuit?.();
   });
 </script>
 
@@ -159,21 +197,22 @@
   <div class="resize-handle resize-se" onmousedown={(e) => startResize(e, 'SouthEast')}></div>
 
   <div class="capture-window">
-    <!-- Ultra-minimal Titlebar -->
+    <!-- Compact custom titlebar -->
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div class="titlebar" onmousedown={startDrag}>
+      <span class="titlebar-title">Quick capture</span>
       <div class="titlebar-controls">
-        <button class="titlebar-btn close" onclick={() => closeWindow()} aria-label="Close">
-          <span class="dot">
-            <svg class="icon" viewBox="0 0 8 8" fill="none" stroke="currentColor" stroke-width="1.5">
-              <path d="M1.5 1.5L6.5 6.5M6.5 1.5L1.5 6.5" />
+        <button class="titlebar-btn minimize" onclick={() => minimizeWindow()} aria-label="Minimize">
+          <span>
+            <svg class="icon" viewBox="0 0 8 8" fill="none" stroke="currentColor" stroke-width="1.25">
+              <path d="M1.5 4H6.5" />
             </svg>
           </span>
         </button>
-        <button class="titlebar-btn minimize" onclick={() => minimizeWindow()} aria-label="Minimize">
-          <span class="dot">
+        <button class="titlebar-btn close" onclick={() => closeWindow()} aria-label="Close quick capture">
+          <span>
             <svg class="icon" viewBox="0 0 8 8" fill="none" stroke="currentColor" stroke-width="1.5">
-              <path d="M1.5 4H6.5" />
+              <path d="M1.5 1.5L6.5 6.5M6.5 1.5L1.5 6.5" />
             </svg>
           </span>
         </button>
@@ -186,7 +225,7 @@
     </div>
 
     <!-- Status Bar -->
-    <StatusBar wordCount={stats.wordCount} charCount={stats.charCount} line={stats.line} column={stats.column} {saved} />
+    <StatusBar wordCount={stats.wordCount} charCount={stats.charCount} line={stats.line} column={stats.column} status={saveStatus} onretry={() => void retrySave()} />
   </div>
 </div>
 
@@ -206,101 +245,70 @@
     width: 100%;
     display: flex;
     flex-direction: column;
-    background: white;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    box-sizing: border-box;
     border-radius: 12px;
     overflow: hidden;
-  }
-
-  :global(.dark) .capture-window {
-    background: #1a1a1e;
   }
 
   .titlebar {
     display: flex;
     align-items: center;
+    justify-content: space-between;
     height: 32px;
-    padding: 0 12px;
-    background: transparent;
+    padding: 0 6px 0 12px;
+    background: var(--bg-sidebar);
+    border-bottom: 1px solid var(--border-color);
     user-select: none;
     flex-shrink: 0;
   }
 
   .titlebar-controls {
     display: flex;
-    gap: 7px;
+    gap: 2px;
+  }
+
+  .titlebar-title {
+    color: var(--text-muted);
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: .01em;
   }
 
   .titlebar-btn {
-    width: 12px;
-    height: 12px;
+    width: 30px;
+    height: 25px;
     display: flex;
     align-items: center;
     justify-content: center;
     border: none;
     background: transparent;
-    border-radius: 50%;
+    color: var(--text-muted);
+    border-radius: 6px;
     cursor: pointer;
     padding: 0;
   }
 
-  .titlebar-btn .dot {
-    width: 12px;
-    height: 12px;
-    border-radius: 50%;
+  .titlebar-btn span {
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: background 0.15s ease;
-    background: #e0e0e0;
   }
 
-  .titlebar-btn .dot .icon {
-    width: 6px;
-    height: 6px;
-    opacity: 0;
-    transition: opacity 0.15s ease;
-    color: rgba(0, 0, 0, 0.5);
+  .titlebar-btn .icon {
+    width: 9px;
+    height: 9px;
   }
 
-  .titlebar-btn:hover .dot .icon {
-    opacity: 1;
+  .titlebar-btn:hover {
+    color: var(--text-primary);
+    background: var(--hover-bg);
   }
 
-  .titlebar-btn.close:hover .dot {
-    background: #ff5f57;
-  }
-
-  .titlebar-btn.close:hover .dot .icon {
-    color: rgba(0, 0, 0, 0.4);
-  }
-
-  .titlebar-btn.minimize:hover .dot {
-    background: #febc2e;
-  }
-
-  .titlebar-btn.minimize:hover .dot .icon {
-    color: rgba(0, 0, 0, 0.4);
-  }
-
-  :global(.dark) .titlebar-btn .dot {
-    background: #3a3a3f;
-  }
-
-  :global(.dark) .titlebar-btn .dot .icon {
-    color: rgba(255, 255, 255, 0.5);
-  }
-
-  :global(.dark) .titlebar-btn.close:hover .dot {
-    background: #ff5f57;
-  }
-
-  :global(.dark) .titlebar-btn.minimize:hover .dot {
-    background: #febc2e;
-  }
-
-  :global(.dark) .titlebar-btn.close:hover .dot .icon,
-  :global(.dark) .titlebar-btn.minimize:hover .dot .icon {
-    color: rgba(0, 0, 0, 0.4);
+  .titlebar-btn.close:hover {
+    color: white;
+    background: #e81123;
   }
 
   .editor-area {

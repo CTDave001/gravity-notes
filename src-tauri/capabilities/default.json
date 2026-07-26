@@ -18,28 +18,14 @@
     "core:window:allow-set-focus",
     "core:window:allow-start-dragging",
     "core:window:allow-start-resize-dragging",
-    "fs:default",
-    "fs:allow-read",
-    "fs:allow-write",
-    "fs:allow-exists",
-    "fs:allow-mkdir",
-    "fs:allow-remove",
-    "fs:allow-rename",
-    {
-      "identifier": "fs:allow-read",
-      "allow": [{ "path": "$APPDATA/**" }]
-    },
-    {
-      "identifier": "fs:allow-write",
-      "allow": [{ "path": "$APPDATA/**" }]
-    },
     "core:webview:allow-create-webview-window",
     "core:webview:allow-webview-position",
     "core:webview:allow-set-webview-focus",
-    "shell:allow-open",
     "global-shortcut:default",
     "global-shortcut:allow-register",
     "global-shortcut:allow-unregister",
-    "store:default"
+    "store:default",
+    "updater:default",
+    "process:allow-restart"
   ]
 }

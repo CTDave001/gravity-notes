@@ -1,6 +1,10 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
-  import { jsPDF } from 'jspdf';
+  import normalFontUrl from 'dejavu-fonts-ttf/ttf/DejaVuSans.ttf?url';
+  import boldFontUrl from 'dejavu-fonts-ttf/ttf/DejaVuSans-Bold.ttf?url';
+  import italicFontUrl from 'dejavu-fonts-ttf/ttf/DejaVuSans-Oblique.ttf?url';
+  import boldItalicFontUrl from 'dejavu-fonts-ttf/ttf/DejaVuSans-BoldOblique.ttf?url';
+  import { focusTrap } from '../focusTrap';
 
   // Unicode font cache - separate for each variant
   let fontCache: { normal?: string; bold?: string; italic?: string; bolditalic?: string } = {};
@@ -18,20 +22,17 @@
   // Load all DejaVu Sans font variants for proper bold/italic support
   async function loadUnicodeFonts(): Promise<typeof fontCache> {
     if (fontCache.normal) {
-      console.log('[Font] Using cached fonts');
       return fontCache;
     }
 
     const fontUrls = {
-      normal: 'https://cdn.jsdelivr.net/npm/dejavu-fonts-ttf@2.37.3/ttf/DejaVuSans.ttf',
-      bold: 'https://cdn.jsdelivr.net/npm/dejavu-fonts-ttf@2.37.3/ttf/DejaVuSans-Bold.ttf',
-      italic: 'https://cdn.jsdelivr.net/npm/dejavu-fonts-ttf@2.37.3/ttf/DejaVuSans-Oblique.ttf',
-      bolditalic: 'https://cdn.jsdelivr.net/npm/dejavu-fonts-ttf@2.37.3/ttf/DejaVuSans-BoldOblique.ttf',
+      normal: normalFontUrl,
+      bold: boldFontUrl,
+      italic: italicFontUrl,
+      bolditalic: boldItalicFontUrl,
     };
 
     try {
-      console.log('[Font] Fetching DejaVu Sans font family...');
-
       // Fetch all variants in parallel
       const [normalRes, boldRes, italicRes, boldItalicRes] = await Promise.all([
         fetch(fontUrls.normal),
@@ -58,7 +59,6 @@
         bolditalic: arrayBufferToBase64(boldItalicBuf),
       };
 
-      console.log('[Font] All font variants loaded successfully');
       return fontCache;
     } catch (err) {
       console.error('[Font] Failed to load fonts:', err);
@@ -224,6 +224,7 @@
 
   async function generatePDF(content: string, title: string): Promise<Uint8Array> {
     const settings = getCurrentSettings();
+    const { jsPDF } = await import('jspdf');
 
     const doc = new jsPDF({
       orientation: 'portrait',
@@ -237,7 +238,6 @@
 
     if (fonts.normal && fonts.bold && fonts.italic && fonts.bolditalic) {
       try {
-        console.log('[PDF] Registering font variants...');
         // Register each font variant separately
         doc.addFileToVFS('DejaVuSans.ttf', fonts.normal);
         doc.addFileToVFS('DejaVuSans-Bold.ttf', fonts.bold);
@@ -250,12 +250,9 @@
         doc.addFont('DejaVuSans-BoldOblique.ttf', 'DejaVuSans', 'bolditalic');
 
         useUnicodeFont = true;
-        console.log('[PDF] All font variants registered successfully');
       } catch (err) {
         console.error('[PDF] Failed to register fonts:', err);
       }
-    } else {
-      console.log('[PDF] Font data incomplete, using fallback');
     }
 
     const pageWidth = doc.internal.pageSize.getWidth();
@@ -529,40 +526,52 @@
     function renderCodeBlock(codeLines: string[], language?: string) {
       if (codeLines.length === 0) return;
 
-      const blockHeight = codeLines.length * codeLineHeight + 6;
-      checkNewPage(blockHeight);
-
-      // Draw background for entire block - theme-aware
-      if (settings.codeTheme === 'dark') {
-        doc.setFillColor(40, 44, 52);
-      } else {
-        doc.setFillColor(248, 249, 250);
-      }
-      doc.roundedRect(margin - 2, y - 3, maxWidth + 4, blockHeight, 2, 2, 'F');
-
-      // Draw left border accent
-      doc.setFillColor(settings.accentColor[0], settings.accentColor[1], settings.accentColor[2]);
-      doc.rect(margin - 2, y - 3, 2, blockHeight, 'F');
-
       doc.setFont('courier', 'normal');
       doc.setFontSize(9);
+      const visualLines = codeLines.flatMap((codeLine) => {
+        const cleaned = cleanText(codeLine);
+        const wrapped = doc.splitTextToSize(cleaned || ' ', maxWidth - 8) as string[];
+        return wrapped.length > 0 ? wrapped : [' '];
+      });
 
-      for (const codeLine of codeLines) {
-        const displayLine = codeLine.length > 90 ? codeLine.slice(0, 87) + '...' : codeLine;
-        const tokens = tokenizeCode(displayLine);
+      let index = 0;
+      while (index < visualLines.length) {
+        checkNewPage(codeLineHeight + 6);
+        const availableHeight = pageHeight - marginBottom - y - 3;
+        const availableLines = Math.max(1, Math.floor(availableHeight / codeLineHeight));
+        const chunk = visualLines.slice(index, index + availableLines);
+        const blockHeight = chunk.length * codeLineHeight + 6;
 
-        let x = margin + 2;
-        for (const token of tokens) {
-          const color = syntaxColors[token.type] || syntaxColors.default;
-          doc.setTextColor(color[0], color[1], color[2]);
-          doc.text(cleanText(token.text), x, y);
-          x += doc.getTextWidth(token.text);
+        if (settings.codeTheme === 'dark') {
+          doc.setFillColor(40, 44, 52);
+        } else {
+          doc.setFillColor(248, 249, 250);
+        }
+        doc.roundedRect(margin - 2, y - 3, maxWidth + 4, blockHeight, 2, 2, 'F');
+        doc.setFillColor(settings.accentColor[0], settings.accentColor[1], settings.accentColor[2]);
+        doc.rect(margin - 2, y - 3, 2, blockHeight, 'F');
+
+        for (const visualLine of chunk) {
+          const tokens = tokenizeCode(visualLine);
+          let x = margin + 2;
+          for (const token of tokens) {
+            const color = syntaxColors[token.type] || syntaxColors.default;
+            doc.setTextColor(color[0], color[1], color[2]);
+            doc.text(cleanText(token.text), x, y);
+            x += doc.getTextWidth(token.text);
+          }
+          y += codeLineHeight;
         }
 
-        y += codeLineHeight;
+        y += 3;
+        index += chunk.length;
+        if (index < visualLines.length) {
+          checkNewPage(pageHeight);
+          doc.setFont('courier', 'normal');
+          doc.setFontSize(9);
+        }
       }
 
-      y += 3;
       doc.setFont(defaultFont, 'normal');
       doc.setFontSize(11);
       doc.setTextColor(50, 50, 50);
@@ -1087,6 +1096,13 @@
       }
     }
 
+    if (inCodeBlock && codeBlockLines.length > 0) {
+      renderCodeBlock(codeBlockLines);
+    }
+    if (inTable && tableRows.length > 0) {
+      renderTable(tableRows);
+    }
+
     // Add final page footer
     addPageFooter();
 
@@ -1149,10 +1165,17 @@
     class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
     onclick={handleBackdropClick}
   >
-    <div class="bg-white dark:bg-surface-900 rounded-xl shadow-xl w-full max-w-lg mx-4 overflow-hidden max-h-[90vh] flex flex-col">
+    <div
+      class="bg-white dark:bg-surface-900 rounded-xl shadow-xl w-full max-w-lg mx-4 overflow-hidden max-h-[90vh] flex flex-col"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="export-title"
+      tabindex="-1"
+      use:focusTrap
+    >
       <!-- Header -->
       <div class="px-6 py-4 border-b border-surface-200 dark:border-surface-700 shrink-0">
-        <h2 class="text-lg font-semibold text-surface-900 dark:text-surface-100">Export Note</h2>
+        <h2 id="export-title" class="text-lg font-semibold text-surface-900 dark:text-surface-100">Export Note</h2>
         <p class="text-sm text-surface-500 dark:text-surface-400 mt-1">Choose a format to export your note</p>
       </div>
 
@@ -1165,6 +1188,7 @@
               ? 'border-accent bg-accent/10 text-accent'
               : 'border-surface-200 dark:border-surface-700 hover:border-surface-300 dark:hover:border-surface-600 text-surface-600 dark:text-surface-400'}"
             onclick={() => selectFormat('pdf')}
+            aria-pressed={selectedFormat === 'pdf'}
           >
             <svg class="w-8 h-8 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
@@ -1180,6 +1204,7 @@
               ? 'border-accent bg-accent/10 text-accent'
               : 'border-surface-200 dark:border-surface-700 hover:border-surface-300 dark:hover:border-surface-600 text-surface-600 dark:text-surface-400'}"
             onclick={() => selectFormat('md')}
+            aria-pressed={selectedFormat === 'md'}
           >
             <svg class="w-8 h-8 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
@@ -1195,6 +1220,7 @@
               ? 'border-accent bg-accent/10 text-accent'
               : 'border-surface-200 dark:border-surface-700 hover:border-surface-300 dark:hover:border-surface-600 text-surface-600 dark:text-surface-400'}"
             onclick={() => selectFormat('txt')}
+            aria-pressed={selectedFormat === 'txt'}
           >
             <svg class="w-8 h-8 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
@@ -1226,6 +1252,7 @@
                     ? 'border-accent bg-accent/5 ring-1 ring-accent/30'
                     : 'border-surface-200 dark:border-surface-700 hover:border-surface-300 dark:hover:border-surface-600'}"
                   onclick={() => selectedTemplate = key as PdfTemplate}
+                  aria-pressed={selectedTemplate === key}
                 >
                   <div class="text-xs font-medium text-surface-800 dark:text-surface-200">{template.name}</div>
                   <div class="text-[10px] text-surface-500 dark:text-surface-400 mt-0.5 line-clamp-1">{template.description}</div>
@@ -1238,10 +1265,11 @@
               <div class="mt-4 p-3 rounded-lg bg-surface-50 dark:bg-surface-800/50 space-y-3">
                 <!-- Font Size -->
                 <div class="flex items-center justify-between">
-                  <label class="text-xs text-surface-600 dark:text-surface-400">Font Size</label>
+                  <label for="pdf-font-size" class="text-xs text-surface-600 dark:text-surface-400">Font Size</label>
                   <div class="flex items-center gap-2">
                     <input
                       type="range"
+                      id="pdf-font-size"
                       min="9"
                       max="14"
                       step="0.5"
@@ -1261,10 +1289,11 @@
 
                 <!-- Line Height -->
                 <div class="flex items-center justify-between">
-                  <label class="text-xs text-surface-600 dark:text-surface-400">Line Height</label>
+                  <label for="pdf-line-height" class="text-xs text-surface-600 dark:text-surface-400">Line Height</label>
                   <div class="flex items-center gap-2">
                     <input
                       type="range"
+                      id="pdf-line-height"
                       min="4"
                       max="10"
                       step="0.5"
@@ -1284,10 +1313,11 @@
 
                 <!-- Margins -->
                 <div class="flex items-center justify-between">
-                  <label class="text-xs text-surface-600 dark:text-surface-400">Margins</label>
+                  <label for="pdf-margins" class="text-xs text-surface-600 dark:text-surface-400">Margins</label>
                   <div class="flex items-center gap-2">
                     <input
                       type="range"
+                      id="pdf-margins"
                       min="10"
                       max="35"
                       step="5"
@@ -1310,7 +1340,7 @@
 
                 <!-- Code Theme -->
                 <div class="flex items-center justify-between">
-                  <label class="text-xs text-surface-600 dark:text-surface-400">Code Theme</label>
+                  <span class="text-xs text-surface-600 dark:text-surface-400">Code Theme</span>
                   <div class="flex gap-1">
                     <button
                       class="px-2.5 py-1 text-[10px] font-medium rounded transition-colors {getCurrentSettings().codeTheme === 'dark'
@@ -1323,6 +1353,7 @@
                         }
                         customSettings.codeTheme = 'dark';
                       }}
+                      aria-pressed={getCurrentSettings().codeTheme === 'dark'}
                     >
                       Dark
                     </button>
@@ -1337,6 +1368,7 @@
                         }
                         customSettings.codeTheme = 'light';
                       }}
+                      aria-pressed={getCurrentSettings().codeTheme === 'light'}
                     >
                       Light
                     </button>

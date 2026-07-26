@@ -1,6 +1,6 @@
 # Card View Redesign Implementation Plan
 
-> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
+> **Historical document:** The card-view work described here has been implemented and subsequently refined. This file is retained as an implementation record, not as active instructions. See the [current architecture](../ARCHITECTURE.md) for shipped behavior.
 
 **Goal:** Transform the grid view from a sidebar layout into a full-window card view with smooth animations and hover previews.
 

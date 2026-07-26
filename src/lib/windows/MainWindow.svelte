@@ -1,7 +1,8 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
+  import { onMount, onDestroy, tick } from 'svelte';
   import { listen, type UnlistenFn } from '@tauri-apps/api/event';
-  import { check } from '@tauri-apps/plugin-updater';
+  import { check, type Update } from '@tauri-apps/plugin-updater';
+  import { relaunch } from '@tauri-apps/plugin-process';
   import Editor from '../components/Editor.svelte';
   import StatusBar from '../components/StatusBar.svelte';
   import NoteList from '../components/NoteList.svelte';
@@ -12,8 +13,14 @@
   import Toast from '../components/Toast.svelte';
   import DeleteToast from '../components/DeleteToast.svelte';
   import CardView from '../components/CardView.svelte';
-  import { listNotes, getNote, saveNote, createNote, deleteNote } from '../api';
-  import type { NoteMeta, EditorStats } from '../types';
+  import SettingsModal from '../components/SettingsModal.svelte';
+  import WelcomeModal from '../components/WelcomeModal.svelte';
+  import UpdateToast from '../components/UpdateToast.svelte';
+  import { DebouncedTaskQueue } from '../autosave';
+  import { listNotes, searchNotes, getNote, saveNote, createNote, deleteNote } from '../api';
+  import { get } from 'svelte/store';
+  import { saveSettings, settings, type Settings } from '../stores/settings';
+  import type { NoteMeta, EditorStats, SaveStatus } from '../types';
 
   // Svelte 5 state using $state() rune
   let notes: NoteMeta[] = $state([]);
@@ -21,15 +28,21 @@
   let selectedNote: NoteMeta | null = $state(null);
   let content: string = $state('');
   let stats: EditorStats = $state({ wordCount: 0, charCount: 0, line: 1, column: 1 });
-  let saved: boolean = $state(true);
+  let saveStatus: SaveStatus = $state('saved');
   let searchQuery: string = $state('');
   let viewMode: 'list' | 'grid' = $state('list');
   let isAnimating: boolean = $state(false);
-  let saveTimeout: ReturnType<typeof setTimeout> | null = $state(null);
 
   let editor: Editor | undefined = $state();
+  let searchBar: SearchBar | undefined = $state();
   let showExportModal: boolean = $state(false);
   let showHelpModal: boolean = $state(false);
+  let showSettingsModal: boolean = $state(false);
+  let showWelcomeModal: boolean = $state(!get(settings).onboardingComplete);
+  let pendingUpdate: Update | null = $state(null);
+  let showUpdateToast = $state(false);
+  let updateInstalling = $state(false);
+  let updateError = $state('');
 
   // Toast state
   let showToast: boolean = $state(false);
@@ -40,10 +53,7 @@
   let deletedNoteTitle: string = $state('');
   let deletedNoteContent: string = $state('');
 
-  // Sidebar state - visible on app start
-  let sidebarVisible: boolean = $state(true);
-  let sidebarPinned: boolean = $state(false);
-  let editorContainer: HTMLElement | undefined = $state();
+  let sidebarVisible: boolean = $state(get(settings).sidebarDefaultOpen);
 
   // Sync state for external changes
   let lastSavedContent: string = '';
@@ -57,98 +67,16 @@
   let exportNoteContent: string = $state('');
   let unlistenExport: UnlistenFn | null = null;
   let unlistenNotesChanged: UnlistenFn | null = null;
+  let unlistenQuit: UnlistenFn | null = null;
+  let searchRequest = 0;
 
   
   const POLL_INTERVAL = 1500;
-  const EDGE_ZONE_WIDTH = 20;
-  const EDGE_HOVER_DELAY = 350; // ms to hover at edge before showing sidebar
-  const CLICK_COOLDOWN = 500; // ms after click before edge hover works
-
-  let edgeHoverTimeout: ReturnType<typeof setTimeout> | null = null;
-  let isInEdgeZone = false;
-  let isMouseDown = false;
-  let recentlyClicked = false;
-  let clickCooldownTimeout: ReturnType<typeof setTimeout> | null = null;
-
-  // Sidebar auto-hide logic - only hide when clicking editor, not on hover
-  function handleMouseMove(e: MouseEvent) {
-    if (sidebarPinned) return;
-
-    // Don't show sidebar while: actively editing, holding mouse, or recently clicked
-    if (isEditing || isMouseDown || recentlyClicked) {
-      // Clear any pending hover timeout
-      if (edgeHoverTimeout) {
-        clearTimeout(edgeHoverTimeout);
-        edgeHoverTimeout = null;
-      }
-      isInEdgeZone = false;
-      return;
-    }
-
-    const inEdge = e.clientX <= EDGE_ZONE_WIDTH;
-
-    // Entering edge zone
-    if (inEdge && !isInEdgeZone) {
-      isInEdgeZone = true;
-      // Start delay timer - only show after sustained hover
-      if (!sidebarVisible && !edgeHoverTimeout) {
-        edgeHoverTimeout = setTimeout(() => {
-          sidebarVisible = true;
-          edgeHoverTimeout = null;
-        }, EDGE_HOVER_DELAY);
-      }
-    }
-    // Leaving edge zone
-    else if (!inEdge && isInEdgeZone) {
-      isInEdgeZone = false;
-      // Cancel pending show if we leave before delay completes
-      if (edgeHoverTimeout) {
-        clearTimeout(edgeHoverTimeout);
-        edgeHoverTimeout = null;
-      }
-    }
-  }
-
-  function handleMouseDown() {
-    isMouseDown = true;
-    recentlyClicked = true;
-    // Clear any pending hover
-    if (edgeHoverTimeout) {
-      clearTimeout(edgeHoverTimeout);
-      edgeHoverTimeout = null;
-    }
-  }
-
-  function handleMouseUp() {
-    isMouseDown = false;
-    // Start cooldown timer
-    if (clickCooldownTimeout) clearTimeout(clickCooldownTimeout);
-    clickCooldownTimeout = setTimeout(() => {
-      recentlyClicked = false;
-      clickCooldownTimeout = null;
-    }, CLICK_COOLDOWN);
-  }
-
-  function handleEditorClick() {
-    // Hide sidebar when clicking in editor area (unless pinned)
-    if (!sidebarPinned && sidebarVisible) {
-      sidebarVisible = false;
-    }
-  }
-
-  function toggleSidebarPin() {
-    sidebarPinned = !sidebarPinned;
-    if (sidebarPinned) {
-      sidebarVisible = true;
-    }
-  }
-
-  function showSidebar() {
-    sidebarVisible = true;
-  }
+  const SAVE_DELAY = 200;
+  const saver = new DebouncedTaskQueue(SAVE_DELAY);
 
   async function checkForExternalChanges() {
-    if (!selectedNote || isEditing || !saved) return;
+    if (!selectedNote || isEditing || saveStatus !== 'saved') return;
 
     try {
       const currentContent = await getNote(selectedNote.id);
@@ -195,14 +123,27 @@
       showHelpModal = true;
     }
     // Ctrl+N - New note
-    if (e.ctrlKey && e.key === 'n' && !e.shiftKey && !e.altKey) {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'n' && !e.shiftKey && !e.altKey) {
       e.preventDefault();
       handleNewNote();
     }
-    // Ctrl+E - Export (when note selected)
-    if (e.ctrlKey && e.key === 'e' && !e.shiftKey && !e.altKey && selectedNote) {
+    // Ctrl/Cmd+Shift+E - Export (when note selected)
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'e' && e.shiftKey && !e.altKey && selectedNote) {
       e.preventDefault();
-      showExportModal = true;
+      void openExportModal();
+    }
+    // Ctrl/Cmd+F - Search all note content
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f' && !e.altKey) {
+      e.preventDefault();
+      viewMode = 'list';
+      sidebarVisible = true;
+      void tick().then(() => searchBar?.focus());
+    }
+    // Ctrl/Cmd+\ - Toggle notes list
+    if ((e.ctrlKey || e.metaKey) && e.key === '\\' && !e.altKey) {
+      e.preventDefault();
+      viewMode = 'list';
+      sidebarVisible = !sidebarVisible;
     }
   }
 
@@ -215,58 +156,57 @@
     }, 5000);
   }
 
-  // Silent auto-update: download in background, install on next restart
-  async function checkAndDownloadUpdate() {
+  async function checkForUpdate() {
     try {
-      const update = await check();
-      if (update) {
-        // Download silently - will be installed on next app restart
-        await update.download();
-        console.log(`Update ${update.version} downloaded, will install on restart`);
+      pendingUpdate = await check({ timeout: 30_000 });
+      if (pendingUpdate) {
+        showUpdateToast = true;
       }
     } catch (err) {
-      // Silent fail - updates are invisible infrastructure
+      console.warn('Update check failed:', err);
     }
   }
 
-  const SAVE_DELAY = 200;
+  async function installUpdate() {
+    if (!pendingUpdate) return;
+    updateInstalling = true;
+    updateError = '';
+    try {
+      await pendingUpdate.downloadAndInstall();
+      await relaunch();
+    } catch (err) {
+      updateError = err instanceof Error ? err.message : 'Could not install the update.';
+      updateInstalling = false;
+    }
+  }
 
   async function loadNotes() {
+    const request = ++searchRequest;
     try {
-      notes = await listNotes();
-      filterNotes();
+      const result = searchQuery.trim()
+        ? await searchNotes(searchQuery.trim())
+        : await listNotes();
+      if (request !== searchRequest) return;
+      notes = result;
+      filteredNotes = result;
     } catch (err) {
       console.error('Failed to load notes:', err);
     }
   }
 
-  function filterNotes() {
-    if (!searchQuery.trim()) {
-      filteredNotes = notes;
-    } else {
-      const query = searchQuery.toLowerCase();
-      filteredNotes = notes.filter(
-        (note) =>
-          note.title.toLowerCase().includes(query) ||
-          note.preview.toLowerCase().includes(query)
-      );
-    }
-  }
-
   async function handleSelectNote(note: NoteMeta) {
-    if (selectedNote && content && !saved) {
-      try {
-        await saveNote(selectedNote.id, content);
-      } catch (err) {
-        console.error('Failed to save note:', err);
-      }
+    try {
+      await flushSelectedNote();
+    } catch {
+      return;
     }
 
     stopPolling();
 
-    selectedNote = note;
     try {
-      content = await getNote(note.id);
+      const nextContent = await getNote(note.id);
+      selectedNote = note;
+      content = nextContent;
       lastSavedContent = content;
       stats = {
         wordCount: content.trim().split(/\s+/).filter((w) => w.length > 0).length,
@@ -274,7 +214,7 @@
         line: 1,
         column: 1,
       };
-      saved = true;
+      saveStatus = 'saved';
       isEditing = false;
 
       if (editor) {
@@ -285,6 +225,9 @@
       startPolling();
     } catch (err) {
       console.error('Failed to load note:', err);
+      if (selectedNote) {
+        startPolling();
+      }
     }
   }
 
@@ -302,7 +245,7 @@
 
     content = data.content;
     stats = data.stats;
-    saved = false;
+    saveStatus = 'saving';
     isEditing = true;
 
     if (editingTimeout) clearTimeout(editingTimeout);
@@ -310,28 +253,52 @@
       isEditing = false;
     }, 2000);
 
-    if (saveTimeout) {
-      clearTimeout(saveTimeout);
+    if (selectedNote) {
+      const id = selectedNote.id;
+      const snapshot = data.content;
+      saver.schedule(() => persistSnapshot(id, snapshot));
     }
+  }
 
-    saveTimeout = setTimeout(async () => {
-      if (selectedNote) {
-        try {
-          const updated = await saveNote(selectedNote.id, content);
-          lastSavedContent = content;
-          selectedNote = { ...selectedNote, ...updated };
-          saved = true;
-          await loadNotes();
-        } catch (err) {
-          console.error('Failed to save note:', err);
+  async function persistSnapshot(id: string, snapshot: string) {
+    try {
+      const updated = await saveNote(id, snapshot);
+      if (selectedNote?.id === id) {
+        selectedNote = { ...selectedNote, ...updated };
+        if (content === snapshot) {
+          lastSavedContent = snapshot;
+          saveStatus = 'saved';
         }
       }
-    }, SAVE_DELAY);
+      await loadNotes();
+    } catch (err) {
+      if (selectedNote?.id === id) {
+        saveStatus = 'error';
+      }
+      console.error('Failed to save note:', err);
+      throw err;
+    }
+  }
+
+  async function flushSelectedNote() {
+    if (!selectedNote) {
+      await saver.drain();
+      return;
+    }
+
+    const id = selectedNote.id;
+    const snapshot = content;
+    if (snapshot === lastSavedContent && saveStatus === 'saved') {
+      await saver.drain();
+      return;
+    }
+
+    await saver.flush(() => persistSnapshot(id, snapshot));
   }
 
   function handleSearch(value: string) {
     searchQuery = value;
-    filterNotes();
+    void loadNotes();
   }
 
   function handleCursorChange(data: { line: number; column: number }) {
@@ -339,16 +306,16 @@
   }
 
   async function handleNewNote() {
-    stopPolling();
-
     try {
+      await flushSelectedNote();
       const note = await createNote();
+      stopPolling();
       await loadNotes();
       selectedNote = note;
       content = '';
       lastSavedContent = '';
       stats = { wordCount: 0, charCount: 0, line: 1, column: 1 };
-      saved = true;
+      saveStatus = 'saved';
       isEditing = false;
       if (editor) {
         updatingFromExternal = true;
@@ -358,12 +325,17 @@
       startPolling();
     } catch (err) {
       console.error('Failed to create note:', err);
+      if (selectedNote) {
+        startPolling();
+      }
     }
   }
 
   async function handleDeleteNote() {
     if (selectedNote) {
       stopPolling();
+      saver.cancelPending();
+      await saver.drain();
 
       // Store note data for potential undo
       deletedNoteTitle = selectedNote.title || 'Untitled';
@@ -375,7 +347,7 @@
         content = '';
         lastSavedContent = '';
         stats = { wordCount: 0, charCount: 0, line: 1, column: 1 };
-        saved = true;
+        saveStatus = 'saved';
         isEditing = false;
         await loadNotes();
 
@@ -422,11 +394,29 @@
     }, 300);
   }
 
+  function handleSettingsSaved(value: Settings) {
+    sidebarVisible = value.sidebarDefaultOpen;
+  }
+
+  async function completeOnboarding() {
+    const current = get(settings);
+    await saveSettings({ ...current, onboardingComplete: true });
+    showWelcomeModal = false;
+  }
+
+  async function openExportModal() {
+    try {
+      await flushSelectedNote();
+      showExportModal = true;
+    } catch {
+      // The status bar exposes the save failure; keep the user in the editor.
+    }
+  }
+
   onMount(async () => {
     loadNotes();
 
-    // Silent auto-update check (downloads in background, installs on next restart)
-    checkAndDownloadUpdate();
+    void checkForUpdate();
 
     // Listen for export requests from popup windows
     unlistenExport = await listen<{ id: string; title: string; content: string }>('export-note', async (event) => {
@@ -436,6 +426,8 @@
       await new Promise(r => setTimeout(r, 150));
 
       // Find and select the note in the main window first
+      searchQuery = '';
+      await loadNotes();
       const note = notes.find(n => n.id === id);
       if (note) {
         await handleSelectNote(note);
@@ -454,27 +446,32 @@
     unlistenNotesChanged = await listen('notes-changed', () => {
       loadNotes();
     });
+
+    unlistenQuit = await listen('prepare-to-quit', () => {
+      void flushSelectedNote();
+    });
   });
 
   onDestroy(() => {
-    if (saveTimeout) clearTimeout(saveTimeout);
+    saver.dispose();
     if (editingTimeout) clearTimeout(editingTimeout);
-    if (edgeHoverTimeout) clearTimeout(edgeHoverTimeout);
-    if (clickCooldownTimeout) clearTimeout(clickCooldownTimeout);
     stopPolling();
     if (unlistenExport) unlistenExport();
     if (unlistenNotesChanged) unlistenNotesChanged();
+    if (unlistenQuit) unlistenQuit();
   });
 </script>
 
-<svelte:window onkeydown={handleGlobalKeydown} onmousedown={handleMouseDown} onmouseup={handleMouseUp} />
+<svelte:window onkeydown={handleGlobalKeydown} />
 
-<!-- svelte-ignore a11y_no_static_element_interactions -->
-<div class="main-window" onmousemove={handleMouseMove}>
+<div class="main-window">
   <!-- Title Bar -->
   <TitleBar
     {viewMode}
+    {sidebarVisible}
     onhelp={() => showHelpModal = true}
+    onsettings={() => showSettingsModal = true}
+    onsidebar={() => sidebarVisible = !sidebarVisible}
     ontoggleview={toggleViewMode}
     onnewnote={handleNewNote}
   />
@@ -495,24 +492,19 @@
       <!-- Sidebar -->
       <div
         class="sidebar"
-        class:visible={sidebarVisible || sidebarPinned}
+        class:visible={sidebarVisible}
       >
         <!-- Sidebar Header -->
         <div class="sidebar-header">
           <div class="sidebar-header-top">
             <span class="sidebar-title">Notes</span>
-            <button
-              class="pin-btn"
-              class:pinned={sidebarPinned}
-              onclick={toggleSidebarPin}
-              title={sidebarPinned ? 'Unpin sidebar' : 'Pin sidebar'}
-            >
-              <svg class="icon" viewBox="0 0 24 24" fill={sidebarPinned ? 'currentColor' : 'none'} stroke="currentColor" stroke-width="2">
-                <path d="M12 17v5M9 3h6l1 7h1a2 2 0 0 1 2 2v1H5v-1a2 2 0 0 1 2-2h1l1-7z" />
+            <button class="pin-btn" onclick={() => sidebarVisible = false} title="Hide notes list" aria-label="Hide notes list">
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" d="M6 6l12 12M18 6L6 18" />
               </svg>
             </button>
           </div>
-          <SearchBar value={searchQuery} oninput={handleSearch} />
+          <SearchBar bind:this={searchBar} value={searchQuery} oninput={handleSearch} />
         </div>
 
         <!-- Note list -->
@@ -529,20 +521,17 @@
       <!-- Editor pane -->
       <div
         class="editor-pane"
-        class:sidebar-visible={sidebarVisible || sidebarPinned}
-        bind:this={editorContainer}
+        class:sidebar-visible={sidebarVisible}
       >
         {#if selectedNote}
           <!-- Editor toolbar -->
           <div class="editor-toolbar">
-            <div class="note-title">
-              {selectedNote.title || 'Untitled'}
-            </div>
             <div class="toolbar-actions">
               <button
                 class="toolbar-btn"
-                onclick={() => showExportModal = true}
-                title="Export note (Ctrl+E)"
+                onclick={openExportModal}
+                title="Export note (Ctrl+Shift+E)"
+                aria-label="Export note"
               >
                 <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
@@ -552,6 +541,7 @@
                 class="toolbar-btn delete"
                 onclick={handleDeleteNote}
                 title="Delete note"
+                aria-label="Delete note"
               >
                 <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
@@ -560,11 +550,11 @@
             </div>
           </div>
           <!-- Editor -->
-          <div class="editor-container" onclick={handleEditorClick}>
+          <div class="editor-container">
             <Editor bind:this={editor} {content} onchange={handleChange} oncursorchange={handleCursorChange} />
           </div>
           <!-- Status bar -->
-          <StatusBar wordCount={stats.wordCount} charCount={stats.charCount} line={stats.line} column={stats.column} {saved} />
+          <StatusBar wordCount={stats.wordCount} charCount={stats.charCount} line={stats.line} column={stats.column} status={saveStatus} onretry={() => void flushSelectedNote()} />
         {:else}
           <!-- Empty state -->
           <div class="empty-state">
@@ -580,6 +570,7 @@
                 </svg>
                 New note
               </button>
+              <p class="shortcut-hint">Tip: use Ctrl+Alt+N for quick capture from anywhere.</p>
             </div>
           </div>
         {/if}
@@ -622,6 +613,23 @@
 <HelpModal
   show={showHelpModal}
   onclose={() => showHelpModal = false}
+/>
+
+<SettingsModal
+  show={showSettingsModal}
+  onclose={() => showSettingsModal = false}
+  onsave={handleSettingsSaved}
+/>
+
+<WelcomeModal show={showWelcomeModal} oncomplete={completeOnboarding} />
+
+<UpdateToast
+  show={showUpdateToast}
+  version={pendingUpdate?.version ?? ''}
+  installing={updateInstalling}
+  error={updateError}
+  oninstall={installUpdate}
+  ondismiss={() => showUpdateToast = false}
 />
 
 <style>
@@ -728,10 +736,6 @@
     color: var(--text-primary);
   }
 
-  .pin-btn.pinned {
-    color: var(--accent);
-  }
-
   .pin-btn .icon {
     width: 16px;
     height: 16px;
@@ -759,19 +763,10 @@
   .editor-toolbar {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: flex-end;
     padding: 8px 16px;
     border-bottom: 1px solid var(--border-color);
     background: var(--bg-primary);
-  }
-
-  .note-title {
-    font-size: 14px;
-    font-weight: 500;
-    color: var(--text-primary);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
   }
 
   .toolbar-actions {
@@ -874,6 +869,23 @@
   .create-btn .icon {
     width: 16px;
     height: 16px;
+  }
+
+  .shortcut-hint {
+    margin: 18px 0 0;
+    color: var(--text-muted);
+    font-size: 12px;
+  }
+
+  @media (max-width: 720px) {
+    .sidebar {
+      width: min(86vw, 300px);
+      box-shadow: 10px 0 40px rgb(0 0 0 / .25);
+    }
+
+    .editor-pane.sidebar-visible {
+      margin-left: 0;
+    }
   }
 
   </style>

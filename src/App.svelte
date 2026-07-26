@@ -1,16 +1,18 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
+  import { onMount, onDestroy, type Component } from 'svelte';
   import './app.css';
-  import CaptureWindow from './lib/windows/CaptureWindow.svelte';
-  import MainWindow from './lib/windows/MainWindow.svelte';
-  import NoteWindow from './lib/windows/NoteWindow.svelte';
   import { cleanupEmptyNotes } from './lib/api';
+  import { loadSettings, settings, type Settings } from './lib/stores/settings';
 
   // Svelte 5 state for window type
   let windowType: 'capture' | 'main' | 'note' = $state('main');
+  let settingsReady = $state(false);
+  let WindowComponent: Component | null = $state(null);
 
   // Media query for dark mode detection
   let darkModeQuery: MediaQueryList | null = null;
+  let unsubscribeSettings: (() => void) | null = null;
+  let activeSettings: Settings | null = null;
 
   function getWindowTypeFromUrl(): 'capture' | 'main' | 'note' {
     const params = new URLSearchParams(window.location.search);
@@ -29,25 +31,48 @@
   }
 
   function handleDarkModeChange(event: MediaQueryListEvent) {
-    applyDarkMode(event.matches);
+    if (activeSettings?.theme === 'system') {
+      applyDarkMode(event.matches);
+    }
+  }
+
+  function applySettings(value: Settings) {
+    activeSettings = value;
+    const isDark = value.theme === 'dark' ||
+      (value.theme === 'system' && (darkModeQuery?.matches ?? false));
+    applyDarkMode(isDark);
+    document.documentElement.style.setProperty('--editor-font-size', `${value.editorFontSize}px`);
+    document.documentElement.style.setProperty('--editor-line-height', String(value.editorLineHeight));
+    document.documentElement.style.setProperty(
+      '--editor-font-family',
+      value.editorFontFamily === 'mono'
+        ? "'JetBrains Mono', 'Cascadia Code', 'Consolas', monospace"
+        : "'Inter', system-ui, -apple-system, sans-serif",
+    );
   }
 
   onMount(async () => {
     // Determine window type from URL params
     windowType = getWindowTypeFromUrl();
 
-    // Set up dark mode detection
     darkModeQuery = window.matchMedia('(prefers-color-scheme: dark)');
-    applyDarkMode(darkModeQuery.matches);
     darkModeQuery.addEventListener('change', handleDarkModeChange);
+    await loadSettings();
+    unsubscribeSettings = settings.subscribe(applySettings);
+    settingsReady = true;
+
+    if (windowType === 'capture') {
+      WindowComponent = (await import('./lib/windows/CaptureWindow.svelte')).default;
+    } else if (windowType === 'note') {
+      WindowComponent = (await import('./lib/windows/NoteWindow.svelte')).default;
+    } else {
+      WindowComponent = (await import('./lib/windows/MainWindow.svelte')).default;
+    }
 
     // Cleanup empty notes on main window load
     if (windowType === 'main') {
       try {
-        const deleted = await cleanupEmptyNotes(15);
-        if (deleted > 0) {
-          console.log(`Cleaned up ${deleted} empty note(s) older than 15 minutes`);
-        }
+        await cleanupEmptyNotes(15);
       } catch (err) {
         console.error('Failed to cleanup empty notes:', err);
       }
@@ -59,13 +84,20 @@
     if (darkModeQuery) {
       darkModeQuery.removeEventListener('change', handleDarkModeChange);
     }
+    unsubscribeSettings?.();
   });
 </script>
 
-{#if windowType === 'capture'}
-  <CaptureWindow />
-{:else if windowType === 'note'}
-  <NoteWindow />
+{#if !settingsReady || !WindowComponent}
+  <div class="app-loading" aria-label="Loading Gravity"></div>
 {:else}
-  <MainWindow />
+  <WindowComponent />
 {/if}
+
+<style>
+  .app-loading {
+    width: 100vw;
+    height: 100vh;
+    background: var(--bg-primary);
+  }
+</style>

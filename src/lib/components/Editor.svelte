@@ -3,13 +3,11 @@
   import { EditorState } from '@codemirror/state';
   import { EditorView, keymap, placeholder, drawSelection, hoverTooltip, type Tooltip } from '@codemirror/view';
   import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
-  import { languages } from '@codemirror/language-data';
   import { defaultKeymap, history, historyKeymap, undo } from '@codemirror/commands';
-  import { syntaxHighlighting, defaultHighlightStyle } from '@codemirror/language';
+  import { syntaxHighlighting, defaultHighlightStyle, LanguageDescription } from '@codemirror/language';
   import { invoke } from '@tauri-apps/api/core';
   import { convertFileSrc } from '@tauri-apps/api/core';
   import { getCurrentWebview } from '@tauri-apps/api/webview';
-  import { readFile } from '@tauri-apps/plugin-fs';
   import TurndownService from 'turndown';
   import { gfm } from '@joplin/turndown-plugin-gfm';
   import type { EditorStats } from '../types';
@@ -38,6 +36,55 @@
   let lastPastedPlainText = '';
   let lastPastePosition = 0;
   let lastPastedLength = 0;
+
+  const codeLanguages = [
+    LanguageDescription.of({
+      name: 'JavaScript',
+      alias: ['js', 'jsx', 'typescript', 'ts', 'tsx'],
+      extensions: ['js', 'jsx', 'ts', 'tsx'],
+      load: () => import('@codemirror/lang-javascript').then(({ javascript }) =>
+        javascript({ jsx: true, typescript: true })),
+    }),
+    LanguageDescription.of({
+      name: 'Python',
+      alias: ['py'],
+      extensions: ['py'],
+      load: () => import('@codemirror/lang-python').then(({ python }) => python()),
+    }),
+    LanguageDescription.of({
+      name: 'HTML',
+      alias: ['htm'],
+      extensions: ['html', 'htm'],
+      load: () => import('@codemirror/lang-html').then(({ html }) => html()),
+    }),
+    LanguageDescription.of({
+      name: 'CSS',
+      extensions: ['css'],
+      load: () => import('@codemirror/lang-css').then(({ css }) => css()),
+    }),
+    LanguageDescription.of({
+      name: 'JSON',
+      extensions: ['json'],
+      load: () => import('@codemirror/lang-json').then(({ json }) => json()),
+    }),
+    LanguageDescription.of({
+      name: 'SQL',
+      extensions: ['sql'],
+      load: () => import('@codemirror/lang-sql').then(({ sql }) => sql()),
+    }),
+    LanguageDescription.of({
+      name: 'Rust',
+      alias: ['rs'],
+      extensions: ['rs'],
+      load: () => import('@codemirror/lang-rust').then(({ rust }) => rust()),
+    }),
+    LanguageDescription.of({
+      name: 'YAML',
+      alias: ['yml'],
+      extensions: ['yaml', 'yml'],
+      load: () => import('@codemirror/lang-yaml').then(({ yaml }) => yaml()),
+    }),
+  ];
 
   // Initialize Turndown for HTML to Markdown conversion
   const turndownService = new TurndownService({
@@ -130,22 +177,18 @@
 
   // Handle dropped images from File object (paste)
   async function handleImageDrop(file: File): Promise<string | null> {
-    console.log('[Image Drop] Processing file:', file.name, file.type);
     const extension = file.name.split('.').pop()?.toLowerCase() || 'png';
     const validExtensions = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'];
 
     if (!validExtensions.includes(extension)) {
-      console.log('[Image Drop] Invalid extension:', extension);
       return null;
     }
 
     const buffer = await file.arrayBuffer();
     const data = Array.from(new Uint8Array(buffer));
-    console.log('[Image Drop] File size:', data.length, 'bytes');
 
     try {
       const filename: string = await invoke('save_image', { data, extension });
-      console.log('[Image Drop] Saved as:', filename);
       return `![${file.name}](gravity-image://${filename})`;
     } catch (err) {
       console.error('[Image Drop] Failed to save image:', err);
@@ -155,23 +198,15 @@
 
   // Handle dropped images from file path (Tauri drag-drop)
   async function handleImagePathDrop(filePath: string): Promise<string | null> {
-    console.log('[Image Path Drop] Processing path:', filePath);
     const extension = filePath.split('.').pop()?.toLowerCase() || 'png';
     const validExtensions = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'];
 
     if (!validExtensions.includes(extension)) {
-      console.log('[Image Path Drop] Not an image:', extension);
       return null;
     }
 
     try {
-      // Read file using Tauri's fs plugin
-      const fileData = await readFile(filePath);
-      const data = Array.from(fileData);
-      console.log('[Image Path Drop] File size:', data.length, 'bytes');
-
-      const filename: string = await invoke('save_image', { data, extension });
-      console.log('[Image Path Drop] Saved as:', filename);
+      const filename: string = await invoke('import_image', { path: filePath });
 
       // Get original filename for alt text
       const originalName = filePath.split(/[/\\]/).pop() || 'image';
@@ -372,13 +407,11 @@
             if (imagePath.startsWith('gravity-image://')) {
               const filename = imagePath.replace('gravity-image://', '');
               const currentImagesPath = getImagesPath();
-              console.log('[Image Hover] filename:', filename, 'imagesPath:', currentImagesPath);
               if (currentImagesPath) {
                 // Use proper path separator for Windows
                 const separator = currentImagesPath.includes('\\') ? '\\' : '/';
                 const fullPath = `${currentImagesPath}${separator}${filename}`;
                 const assetUrl = convertFileSrc(fullPath);
-                console.log('[Image Hover] fullPath:', fullPath, 'assetUrl:', assetUrl);
                 img.src = assetUrl;
               } else {
                 dom.textContent = 'Loading...';
@@ -395,10 +428,6 @@
               console.error('[Image Hover] Image load error:', img.src, e);
               dom.textContent = 'Image not found';
             };
-            img.onload = () => {
-              console.log('[Image Hover] Image loaded successfully');
-            };
-
             dom.appendChild(img);
             return { dom };
           }
@@ -450,20 +479,16 @@
         return false;
       },
       drop(event, editorView) {
-        console.log('[Drop Event] Triggered');
         const files = event.dataTransfer?.files;
         if (!files || files.length === 0) {
-          console.log('[Drop Event] No files');
           return false;
         }
 
-        console.log('[Drop Event] Files:', Array.from(files).map(f => f.name));
         const imageFiles = Array.from(files).filter(f =>
           f.type.startsWith('image/')
         );
 
         if (imageFiles.length === 0) {
-          console.log('[Drop Event] No image files');
           return false;
         }
 
@@ -471,9 +496,7 @@
 
         // Get cursor position from drop location
         const pos = editorView.posAtCoords({ x: event.clientX, y: event.clientY });
-        console.log('[Drop Event] Position:', pos);
         if (pos === null) {
-          console.log('[Drop Event] Could not get position');
           return false;
         }
 
@@ -553,12 +576,6 @@
             lastPastePosition = pos;
             lastPastedLength = markdownText.length;
 
-            console.log('[Paste] Converted HTML to Markdown:', {
-              markdownLength: markdownText.length,
-              plainTextLength: lastPastedPlainText.length,
-              position: pos
-            });
-
             // Show toast
             showPasteNotification();
 
@@ -578,7 +595,7 @@
         keymap.of([...defaultKeymap, ...historyKeymap]),
         markdown({
           base: markdownLanguage,
-          codeLanguages: languages,
+          codeLanguages,
         }),
         syntaxHighlighting(defaultHighlightStyle),
         placeholder('Start writing...'),
@@ -590,10 +607,11 @@
         EditorView.theme({
           '&': {
             height: '100%',
-            fontSize: '15px',
+            fontSize: 'var(--editor-font-size)',
           },
           '.cm-content': {
-            fontFamily: "'JetBrains Mono', 'Consolas', monospace",
+            fontFamily: 'var(--editor-font-family)',
+            lineHeight: 'var(--editor-line-height)',
             padding: '16px',
           },
           '.cm-line': {
@@ -655,15 +673,12 @@
   }
 
   async function handleContainerDrop(e: DragEvent) {
-    console.log('[Container Drop] Event triggered');
     const files = e.dataTransfer?.files;
     if (!files || files.length === 0) {
-      console.log('[Container Drop] No files');
       return;
     }
 
     const imageFiles = Array.from(files).filter(f => f.type.startsWith('image/'));
-    console.log('[Container Drop] Image files:', imageFiles.map(f => f.name));
 
     if (imageFiles.length === 0) return;
 
@@ -671,17 +686,14 @@
     e.stopPropagation();
 
     if (!view) {
-      console.log('[Container Drop] No editor view');
       return;
     }
 
     // Insert at current cursor position
     const pos = view.state.selection.main.head;
-    console.log('[Container Drop] Insert position:', pos);
 
     for (const file of imageFiles) {
       const md = await handleImageDrop(file);
-      console.log('[Container Drop] Generated markdown:', md);
       if (md && view) {
         view.dispatch({
           changes: { from: pos, insert: md + '\n' },
@@ -695,7 +707,6 @@
     // Get images path for hover previews
     try {
       imagesPathValue = await invoke('get_images_path');
-      console.log('[Editor] Images path:', imagesPathValue);
     } catch (err) {
       console.error('[Editor] Failed to get images path:', err);
     }
@@ -706,11 +717,9 @@
     try {
       const webview = getCurrentWebview();
       const unlisten = await webview.onDragDropEvent(async (event) => {
-        console.log('[Tauri DragDrop] Event:', event.payload.type);
 
         if (event.payload.type === 'drop') {
           const paths = event.payload.paths;
-          console.log('[Tauri DragDrop] Dropped paths:', paths);
 
           if (!view || !paths || paths.length === 0) return;
 

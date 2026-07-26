@@ -91,6 +91,7 @@
           class="note-item"
           class:selected={selectedId === note.id}
           onclick={() => handleSelect(note)}
+          aria-pressed={selectedId === note.id}
         >
           <div class="note-title">
             {note.title || 'Untitled'}
@@ -107,6 +108,7 @@
           class="popout-btn"
           onclick={(e) => openNoteInNewWindow(e, note)}
           title="Open in new window"
+          aria-label={`Open ${note.title || 'Untitled'} in a new window`}
         >
           <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
@@ -123,6 +125,7 @@
           class="note-card"
           class:selected={selectedId === note.id}
           onclick={() => handleSelect(note)}
+          aria-pressed={selectedId === note.id}
         >
           <div class="note-title">
             {note.title || 'Untitled'}
@@ -139,6 +142,7 @@
           class="popout-btn"
           onclick={(e) => openNoteInNewWindow(e, note)}
           title="Open in new window"
+          aria-label={`Open ${note.title || 'Untitled'} in a new window`}
         >
           <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
@@ -302,6 +306,18 @@
   .popout-btn:hover {
     background: var(--hover-bg);
     color: var(--text-primary);
+  }
+
+  .popout-btn:focus-visible {
+    opacity: 1;
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+
+  .note-item:focus-visible,
+  .note-card:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
   }
 
   /* Line clamp utility */

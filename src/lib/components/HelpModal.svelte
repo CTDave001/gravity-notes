@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { focusTrap } from '../focusTrap';
 
   let {
     show = false,
@@ -13,10 +14,12 @@
 
   // Detect macOS for keyboard shortcut display
   let isMac = $state(false);
+  let isWindows = $state(false);
 
   onMount(() => {
     isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0 ||
             navigator.userAgent.toUpperCase().indexOf('MAC') >= 0;
+    isWindows = navigator.userAgent.toUpperCase().includes('WINDOWS');
   });
 
   // Get the correct modifier key name for the current OS
@@ -69,13 +72,15 @@
       { keys: [mod(), shift(), 'Z'], action: 'Redo' },
       { keys: [mod(), 'S'], action: 'Save note' },
       { keys: [mod(), 'N'], action: 'New note' },
-      { keys: [mod(), 'E'], action: 'Export note' },
+      { keys: [mod(), shift(), 'E'], action: 'Export note' },
+      { keys: [mod(), 'F'], action: 'Search all notes' },
+      { keys: [mod(), '\\'], action: 'Toggle notes list' },
       { keys: ['F1'], action: 'Show help' },
     ]},
     { category: 'Global (works anywhere)', items: [
       { keys: [mod(), alt(), 'N'], action: 'Quick capture' },
       { keys: [mod(), alt(), 'G'], action: 'Focus Gravity' },
-      { keys: [mod(), alt(), 'V'], action: 'Clipboard to Markdown' },
+      ...(isWindows ? [{ keys: [mod(), alt(), 'V'], action: 'Clipboard to Markdown' }] : []),
     ]},
   ]);
 
@@ -118,17 +123,25 @@
     class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
     onclick={handleBackdropClick}
   >
-    <div class="bg-white dark:bg-zinc-900 rounded-xl shadow-2xl w-full max-w-2xl mx-4 overflow-hidden max-h-[85vh] flex flex-col">
+    <div
+      class="bg-white dark:bg-zinc-900 rounded-xl shadow-2xl w-full max-w-2xl mx-4 overflow-hidden max-h-[85vh] flex flex-col"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="help-title"
+      tabindex="-1"
+      use:focusTrap
+    >
       <!-- Header -->
       <div class="px-6 py-4 border-b border-zinc-200 dark:border-zinc-700 flex items-center justify-between shrink-0">
         <div>
-          <h2 class="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Help</h2>
+          <h2 id="help-title" class="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Help</h2>
           <p class="text-sm text-zinc-500 dark:text-zinc-400 mt-0.5">Keyboard shortcuts & Markdown reference</p>
         </div>
         <button
           class="p-2 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-500 transition-colors"
           onclick={onclose}
           title="Close"
+          aria-label="Close help"
         >
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
@@ -138,12 +151,14 @@
 
       <!-- Tabs -->
       <div class="px-6 pt-4 border-b border-zinc-200 dark:border-zinc-700 shrink-0">
-        <div class="flex gap-1">
+        <div class="flex gap-1" role="tablist" aria-label="Help sections">
           <button
             class="px-4 py-2 text-sm font-medium rounded-t-lg transition-colors relative {activeTab === 'shortcuts'
               ? 'text-zinc-900 dark:text-zinc-100 bg-zinc-100 dark:bg-zinc-800'
               : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'}"
             onclick={() => activeTab = 'shortcuts'}
+            role="tab"
+            aria-selected={activeTab === 'shortcuts'}
           >
             Keyboard Shortcuts
           </button>
@@ -152,6 +167,8 @@
               ? 'text-zinc-900 dark:text-zinc-100 bg-zinc-100 dark:bg-zinc-800'
               : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'}"
             onclick={() => activeTab = 'markdown'}
+            role="tab"
+            aria-selected={activeTab === 'markdown'}
           >
             Markdown Syntax
           </button>

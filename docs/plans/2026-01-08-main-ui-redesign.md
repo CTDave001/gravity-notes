@@ -1,5 +1,7 @@
 # Main UI Redesign - Design Document
 
+> **Historical document:** This proposal is retained for design history. The shipped UI uses an explicit notes-list toggle instead of an invisible edge trigger or pin mode, and `Ctrl+B` remains the Markdown bold shortcut. See the [current architecture](../ARCHITECTURE.md) for shipped behavior.
+
 > Modernize the main window with auto-hiding sidebar, subtle depth/polish, and warm/cool color tints.
 
 ## Goals

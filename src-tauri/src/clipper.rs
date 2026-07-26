@@ -9,10 +9,10 @@ use std::os::windows::ffi::OsStrExt;
 /// Read HTML from Windows clipboard
 #[cfg(target_os = "windows")]
 fn get_clipboard_html() -> Option<String> {
+    use windows::core::*;
+    use windows::Win32::Foundation::*;
     use windows::Win32::System::DataExchange::*;
     use windows::Win32::System::Memory::*;
-    use windows::Win32::Foundation::*;
-    use windows::core::*;
 
     unsafe {
         if OpenClipboard(None).is_err() {
@@ -69,16 +69,14 @@ fn extract_html_from_cf_html(cf_html: &str) -> Option<String> {
     // <html>...</html>
 
     // Try to find StartFragment/EndFragment for selection
-    let start_frag = cf_html.find("StartFragment:")
-        .and_then(|i| {
-            let rest = &cf_html[i + 14..];
-            rest.lines().next()?.trim().parse::<usize>().ok()
-        });
-    let end_frag = cf_html.find("EndFragment:")
-        .and_then(|i| {
-            let rest = &cf_html[i + 12..];
-            rest.lines().next()?.trim().parse::<usize>().ok()
-        });
+    let start_frag = cf_html.find("StartFragment:").and_then(|i| {
+        let rest = &cf_html[i + 14..];
+        rest.lines().next()?.trim().parse::<usize>().ok()
+    });
+    let end_frag = cf_html.find("EndFragment:").and_then(|i| {
+        let rest = &cf_html[i + 12..];
+        rest.lines().next()?.trim().parse::<usize>().ok()
+    });
 
     if let (Some(start), Some(end)) = (start_frag, end_frag) {
         if end > start && end <= cf_html.len() {
@@ -127,9 +125,7 @@ pub fn clip_to_markdown() -> Result<String, String> {
     };
 
     // Write markdown back to clipboard
-    clipboard
-        .set_text(&markdown)
-        .map_err(|e| e.to_string())?;
+    clipboard.set_text(&markdown).map_err(|e| e.to_string())?;
 
     Ok(markdown)
 }
@@ -149,7 +145,12 @@ fn clean_markdown(md: &str) -> String {
         .iter()
         .map(|line| {
             // Preserve indentation for code blocks and lists
-            if line.starts_with("    ") || line.starts_with("\t") || line.starts_with("- ") || line.starts_with("* ") || line.starts_with("> ") {
+            if line.starts_with("    ")
+                || line.starts_with("\t")
+                || line.starts_with("- ")
+                || line.starts_with("* ")
+                || line.starts_with("> ")
+            {
                 line.trim_end().to_string()
             } else {
                 line.trim().to_string()

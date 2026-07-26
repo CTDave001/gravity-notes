@@ -1,6 +1,6 @@
 [package]
 name = "gravity"
-version = "1.0.0"
+version = "1.0.1"
 description = "A minimal, beautiful note-taking app"
 authors = ["David"]
 license = "MIT"
@@ -19,9 +19,7 @@ tauri-build = { version = "2.5.3", features = [] }
 
 [dependencies]
 tauri = { version = "2", features = ["protocol-asset", "tray-icon", "macos-private-api"] }
-tauri-plugin-fs = "2"
 tauri-plugin-global-shortcut = "2"
-tauri-plugin-shell = "2"
 tauri-plugin-store = "2"
 tauri-plugin-log = "2"
 tauri-plugin-updater = "2"
