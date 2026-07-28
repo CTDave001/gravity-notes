@@ -18,7 +18,7 @@ All notable changes to Gravity are documented here. The project follows semantic
 - Rebuilt the first-run experience with an iPhone-first layout, native system
   typography, clearer privacy messaging, and a focused first-note action.
 - Restored Gravity's original gravity-well identity across desktop, iOS, and
-  Android assets.
+  Android assets, with balanced spacing on a full-bleed blue-slate field.
 - Made iOS preparation overwrite Tauri's generated placeholder icon catalog
   with the committed Gravity icon set.
 - Split desktop-only updater, process relaunch, global shortcut, tray, clipboard, secondary-window, and close-to-tray behavior from the mobile runtime.
